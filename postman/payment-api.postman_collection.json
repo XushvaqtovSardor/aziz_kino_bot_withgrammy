@@ -1,0 +1,262 @@
+{
+  "info": {
+    "name": "Payment & Premium Integration API",
+    "description": "API endpoints for payment and premium features",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Payment",
+      "item": [
+        {
+          "name": "Create Payment",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"telegramId\": \"123456789\",\n  \"amount\": 50000,\n  \"duration\": 30\n}"
+            },
+            "url": {
+              "raw": "http://localhost:3000/payment/create",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "3000",
+              "path": ["payment", "create"]
+            },
+            "description": "Create a new payment and get payment link"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Payment Status",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:3000/payment/status/:paymentId",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "3000",
+              "path": ["payment", "status", ":paymentId"],
+              "variable": [
+                {
+                  "key": "paymentId",
+                  "value": "1"
+                }
+              ]
+            },
+            "description": "Check payment status by payment ID"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Payment History",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:3000/payment/history/:telegramId",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "3000",
+              "path": ["payment", "history", ":telegramId"],
+              "variable": [
+                {
+                  "key": "telegramId",
+                  "value": "123456789"
+                }
+              ]
+            },
+            "description": "Get payment history for a user"
+          },
+          "response": []
+        },
+        {
+          "name": "Test Webhook (Success)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"paymentId\": 1,\n  \"status\": \"success\"\n}"
+            },
+            "url": {
+              "raw": "http://localhost:3000/payment/webhook/test",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "3000",
+              "path": ["payment", "webhook", "test"]
+            },
+            "description": "Test webhook for successful payment (development only)"
+          },
+          "response": []
+        },
+        {
+          "name": "Test Webhook (Failed)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"paymentId\": 1,\n  \"status\": \"failed\"\n}"
+            },
+            "url": {
+              "raw": "http://localhost:3000/payment/webhook/test",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "3000",
+              "path": ["payment", "webhook", "test"]
+            },
+            "description": "Test webhook for failed payment (development only)"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Premium",
+      "item": [
+        {
+          "name": "Check Premium Status",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:3000/payment/premium-status/:telegramId",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "3000",
+              "path": ["payment", "premium-status", ":telegramId"],
+              "variable": [
+                {
+                  "key": "telegramId",
+                  "value": "123456789"
+                }
+              ]
+            },
+            "description": "Check if user has active premium subscription"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Payme Webhook",
+      "item": [
+        {
+          "name": "CheckPerformTransaction",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Basic {{payme_auth}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"method\": \"CheckPerformTransaction\",\n  \"params\": {\n    \"amount\": 5000000,\n    \"account\": {\n      \"order_id\": 1\n    }\n  }\n}"
+            },
+            "url": {
+              "raw": "http://localhost:3000/payment/webhook/payme",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "3000",
+              "path": ["payment", "webhook", "payme"]
+            },
+            "description": "Payme webhook - Check if transaction can be performed"
+          },
+          "response": []
+        },
+        {
+          "name": "CreateTransaction",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Basic {{payme_auth}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"method\": \"CreateTransaction\",\n  \"params\": {\n    \"id\": \"63b1ef4e0b852512dcf0d4e5\",\n    \"time\": 1672578894762,\n    \"amount\": 5000000,\n    \"account\": {\n      \"order_id\": 1\n    }\n  }\n}"
+            },
+            "url": {
+              "raw": "http://localhost:3000/payment/webhook/payme",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "3000",
+              "path": ["payment", "webhook", "payme"]
+            },
+            "description": "Payme webhook - Create transaction"
+          },
+          "response": []
+        },
+        {
+          "name": "PerformTransaction",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Basic {{payme_auth}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"method\": \"PerformTransaction\",\n  \"params\": {\n    \"id\": \"63b1ef4e0b852512dcf0d4e5\",\n    \"account\": {\n      \"order_id\": 1\n    }\n  }\n}"
+            },
+            "url": {
+              "raw": "http://localhost:3000/payment/webhook/payme",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "3000",
+              "path": ["payment", "webhook", "payme"]
+            },
+            "description": "Payme webhook - Perform (complete) transaction"
+          },
+          "response": []
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:3000"
+    },
+    {
+      "key": "payme_auth",
+      "value": "base64_encoded_merchant_id:password"
+    }
+  ]
+}
