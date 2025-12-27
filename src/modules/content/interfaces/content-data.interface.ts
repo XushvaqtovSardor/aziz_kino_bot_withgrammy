@@ -24,6 +24,7 @@ export interface SerialData {
   genre?: string;
   season?: number;
   episodeCount?: number;
+  totalEpisodes?: number;
   channelMessageId?: number;
   hasCustomChannel?: boolean;
   customChannelId?: string;

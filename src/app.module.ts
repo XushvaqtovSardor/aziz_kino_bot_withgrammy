@@ -33,7 +33,7 @@ import { GrammyBotModule } from './common/grammy/grammy-bot.module';
     UserModule,
     BroadcastModule,
     SettingsModule,
-    AdminHandlersModule, 
+    AdminHandlersModule,
     UserHandlersModule,
     AdminApiModule,
     BotModule,

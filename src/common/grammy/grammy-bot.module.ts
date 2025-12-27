@@ -6,6 +6,7 @@ import { BotContext } from '../../bot/bot.context';
 export class GrammyBotService implements OnModuleInit {
   private readonly logger = new Logger(GrammyBotService.name);
   public bot: Bot<BotContext>;
+  public botUsername: string;
 
   constructor() {
     const token = process.env.BOT_TOKEN;
@@ -40,6 +41,7 @@ export class GrammyBotService implements OnModuleInit {
     try {
       await this.bot.start({
         onStart: ({ username }) => {
+          this.botUsername = username;
           this.logger.log(`🤖 Grammy Bot @${username} started successfully!`);
         },
       });

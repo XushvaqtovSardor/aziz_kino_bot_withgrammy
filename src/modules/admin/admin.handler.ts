@@ -1,10 +1,11 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { BotContext } from '../../bot/bot.context';
-import { InlineKeyboard, Keyboard, InputFile } from 'grammy';
+import { InlineKeyboard, Keyboard } from 'grammy';
 import { AdminService } from './services/admin.service';
 import { UserService } from '../user/services/user.service';
 import { MovieService } from '../content/services/movie.service';
 import { SerialService } from '../content/services/serial.service';
+import { SerialManagementService } from './services/serial-management.service';
 import { FieldService } from '../field/services/field.service';
 import { PaymentService } from '../payment/services/payment.service';
 import { WatchHistoryService } from '../content/services/watch-history.service';
@@ -14,6 +15,7 @@ import { SessionService } from './services/session.service';
 import { PremiumService } from '../payment/services/premium.service';
 import { SettingsService } from '../settings/services/settings.service';
 import { GrammyBotService } from '../../common/grammy/grammy-bot.module';
+import { ChannelType } from '@prisma/client';
 import {
   AdminState,
   MovieCreateStep,
@@ -30,6 +32,7 @@ export class AdminHandler implements OnModuleInit {
     private userService: UserService,
     private movieService: MovieService,
     private serialService: SerialService,
+    private serialManagementService: SerialManagementService,
     private fieldService: FieldService,
     private paymentService: PaymentService,
     private watchHistoryService: WatchHistoryService,
@@ -86,6 +89,14 @@ export class AdminHandler implements OnModuleInit {
     bot.hears(
       '📺 Serial yuklash',
       this.withAdminCheck(this.startSerialCreation.bind(this)),
+    );
+    bot.hears(
+      '🆕 Yangi serial yaratish',
+      this.withAdminCheck(this.startNewSerialCreation.bind(this)),
+    );
+    bot.hears(
+      "➕ Mavjud serialga qism qo'shish",
+      this.withAdminCheck(this.startAddingEpisode.bind(this)),
     );
     bot.hears(
       '📹 Kinoga video biriktirish',
@@ -235,7 +246,7 @@ export class AdminHandler implements OnModuleInit {
       const session = this.sessionService.getSession(ctx.from.id);
 
       if (admin && session) {
-        await this.handleMovieVideo(ctx);
+        await this.handleVideoMessage(ctx);
       } else {
         await next(); // Let user handler process it
       }
@@ -416,67 +427,51 @@ export class AdminHandler implements OnModuleInit {
       session.state === AdminState.CREATING_SERIAL &&
       session.step === SerialCreateStep.PHOTO
     ) {
-      const data = session.data;
-
-      try {
-        const field = data.selectedField;
-
-        // Create serial caption with button
-        const caption = `
-📺 **${data.title}**
-🎬 Sezon: ${data.season}
-📺 Qismlar: ${data.episodeCount}
-🎭 Janr: ${data.genre}
-${data.description ? `📝 ${data.description}\n` : ''}
-🆔 Kod: ${data.code}
-        `.trim();
-
-        const keyboard = new InlineKeyboard().url(
-          "🤖 Botga o'tish",
-          `https://t.me/${process.env.BOT_USERNAME}?start=serial_${data.code}`,
-        );
-
-        // Send poster with info to field channel
-        const sentPoster = await ctx.api.sendPhoto(
-          field.channelId,
-          photo.file_id,
-          {
-            caption,
-            parse_mode: 'Markdown',
-            reply_markup: keyboard,
-          },
-        );
-
-        // Save serial to database
-        await this.serialService.create({
-          code: data.code,
-          title: data.title,
-          genre: data.genre,
-          description: data.description,
-          season: data.season,
-          episodeCount: data.episodeCount,
-          fieldId: field.id,
-          posterFileId: photo.file_id,
-          channelMessageId: sentPoster.message_id,
-        });
-
-        this.sessionService.clearSession(ctx.from.id);
-
-        await ctx.reply(
-          `✅ Serial muvaffaqiyatli yaratildi!\n\n📦 Field kanal: ${field.name}\n🔗 Message ID: ${sentPoster.message_id}`,
-          AdminKeyboard.getAdminMainMenu(admin.role),
-        );
-      } catch (error) {
-        this.logger.error('Error creating serial:', error);
-        await ctx.reply(
-          `❌ Xatolik yuz berdi. Botni kanallarga admin qiling va qaytadan urinib ko'ring.\n\nXatolik: ${error.message}`,
-        );
-      }
+      // Instead of creating serial immediately, save poster and ask for episodes
+      await this.serialManagementService.handleSerialPoster(ctx, photo.file_id);
       return;
     }
   }
 
   // ==================== VIDEO HANDLER ====================
+  private async handleVideoMessage(ctx: BotContext) {
+    if (!ctx.from || !ctx.message || !('video' in ctx.message)) return;
+
+    const session = this.sessionService.getSession(ctx.from.id);
+    if (!session) return;
+
+    // Check if creating movie
+    if (
+      session.state === AdminState.CREATING_MOVIE &&
+      session.step === MovieCreateStep.VIDEO
+    ) {
+      await this.handleMovieVideo(ctx);
+      return;
+    }
+
+    // Check if creating serial and uploading episodes
+    if (session.state === AdminState.CREATING_SERIAL && session.step === 6) {
+      // step 6 = UPLOADING_EPISODES (new serial)
+      await this.serialManagementService.handleNewSerialEpisodeVideo(
+        ctx,
+        ctx.message.video.file_id,
+        session,
+      );
+      return;
+    }
+
+    // Check if adding episodes to existing serial
+    if (session.state === AdminState.CREATING_SERIAL && session.step === 7) {
+      // step 7 = ADDING_EPISODES (existing serial)
+      await this.serialManagementService.handleExistingSerialEpisodeVideo(
+        ctx,
+        ctx.message.video.file_id,
+        session,
+      );
+      return;
+    }
+  }
+
   private async handleMovieVideo(ctx: BotContext) {
     if (!ctx.from || !ctx.message || !('video' in ctx.message)) return;
 
@@ -539,27 +534,31 @@ ${data.description ? `📝 ${data.description}\n` : ''}
         return;
       }
 
-      // Create movie caption with button for field channel
+      // Get field info first
+      const field = data.selectedField;
+
+      // Create movie caption with button for field channel (DMC style)
       const caption = `
-🎬 **${data.title}**
-🎭 Janr: ${data.genre}
-${data.description ? `📝 ${data.description}\n` : ''}
-🆔 Kod: ${data.code}
+${data.title}
+
+${data.description || ''}
+
+📖 Qism: ${data.episodeCount || 1}
+🎭 Janrlari: ${data.genre}
+🔖 Kanal: ${field.channelLink || '@' + field.name}
       `.trim();
 
       const keyboard = new InlineKeyboard().url(
-        "🤖 Botga o'tish",
-        `https://t.me/${process.env.BOT_USERNAME}?start=movie_${data.code}`,
+        '✨ Tomosha Qilish',
+        `https://t.me/${this.grammyBot.botUsername}?start=${data.code}`,
       );
 
       // Send poster with info to field channel
-      const field = data.selectedField;
       const sentPoster = await ctx.api.sendPhoto(
         field.channelId,
         data.posterFileId,
         {
           caption,
-          parse_mode: 'Markdown',
           reply_markup: keyboard,
         },
       );
@@ -797,12 +796,52 @@ ${data.description ? `📝 ${data.description}\n` : ''}
       return;
     }
 
+    const keyboard = new Keyboard()
+      .text('🆕 Yangi serial yaratish')
+      .row()
+      .text("➕ Mavjud serialga qism qo'shish")
+      .row()
+      .text('❌ Bekor qilish')
+      .resized();
+
+    await ctx.reply('📺 Serial boshqaruvi\n\nQaysi amalni bajarmoqchisiz?', {
+      reply_markup: keyboard,
+    });
+  }
+
+  private async startNewSerialCreation(ctx: BotContext) {
+    const admin = await this.getAdmin(ctx);
+    if (!admin || !ctx.from) {
+      await ctx.reply("❌ Sizda admin huquqi yo'q.");
+      return;
+    }
+
     this.sessionService.createSession(ctx.from.id, AdminState.CREATING_SERIAL);
+    this.sessionService.updateSessionData(ctx.from.id, { isNewSerial: true });
+
     await ctx.reply(
-      '📺 Serial yuklash boshlandi!\n\n' +
+      '📺 Yangi serial yaratish boshlandi!\n\n' +
         '1️⃣ Serial kodini kiriting:\n' +
         "⚠️ Kod FAQAT raqamlardan iborat bo'lishi kerak!\n" +
         'Masalan: 12345',
+      AdminKeyboard.getCancelButton(),
+    );
+  }
+
+  private async startAddingEpisode(ctx: BotContext) {
+    const admin = await this.getAdmin(ctx);
+    if (!admin || !ctx.from) {
+      await ctx.reply("❌ Sizda admin huquqi yo'q.");
+      return;
+    }
+
+    this.sessionService.createSession(ctx.from.id, AdminState.CREATING_SERIAL);
+    this.sessionService.updateSessionData(ctx.from.id, {
+      isAddingEpisode: true,
+    });
+
+    await ctx.reply(
+      "📺 Serialga qism qo'shish\n\n" + 'Serial kodini kiriting:',
       AdminKeyboard.getCancelButton(),
     );
   }
@@ -970,11 +1009,20 @@ ${data.description ? `📝 ${data.description}\n` : ''}
       AdminState.ADD_MANDATORY_CHANNEL,
     );
 
-    const keyboard = new Keyboard().text('❌ Bekor qilish').resized();
+    const keyboard = new Keyboard()
+      .text('🌐 Public kanal')
+      .text('🔒 Private kanal')
+      .row()
+      .text('🔗 Boshqa link')
+      .row()
+      .text('❌ Bekor qilish')
+      .resized();
 
     await ctx.reply(
-      '📝 Majburiy kanalning ID sini yuboring:\n\n' +
-        'Masalan: -1001234567890\n\n' +
+      '📝 Kanal turini tanlang:\n\n' +
+        '🌐 Public kanal - Ochiq kanal (ID/username + link)\n' +
+        '🔒 Private kanal - Yopiq kanal (ID + link)\n' +
+        '🔗 Boshqa link - Instagram, YouTube va boshqalar\n\n' +
         "❌ Bekor qilish uchun 'Bekor qilish' tugmasini bosing",
       { reply_markup: keyboard },
     );
@@ -1529,17 +1577,67 @@ Qaysi guruhga xabar yubormoqchisiz?
     if (!admin || !ctx.from) return;
 
     switch (session.step) {
-      case 0: // Channel ID
-        const channelId = text.trim();
-        if (!channelId.startsWith('-')) {
+      case 0: // Channel type selection
+        let channelType: 'PUBLIC' | 'PRIVATE' | 'EXTERNAL';
+
+        if (text === '🌐 Public kanal') {
+          channelType = 'PUBLIC';
+          this.sessionService.updateSessionData(ctx.from.id, { channelType });
+          this.sessionService.nextStep(ctx.from.id);
           await ctx.reply(
-            "❌ Kanal ID noto'g'ri formatda!\n\nKanal ID '-' belgisi bilan boshlanishi kerak.\nMasalan: -1001234567890",
+            '🆔 Kanal ID sini yoki @username ni yuboring:\n\nMasalan:\n- -1001234567890 (ID)\n- @mychannel (username)',
             AdminKeyboard.getCancelButton(),
           );
-          return;
+        } else if (text === '🔒 Private kanal') {
+          channelType = ChannelType.PRIVATE;
+          this.sessionService.updateSessionData(ctx.from.id, { channelType });
+          this.sessionService.nextStep(ctx.from.id);
+          await ctx.reply(
+            "🆔 Kanal ID sini yuboring:\n\nKanal ID '-' belgisi bilan boshlanishi kerak.\nMasalan: -1001234567890",
+            AdminKeyboard.getCancelButton(),
+          );
+        } else if (text === '🔗 Boshqa link') {
+          channelType = ChannelType.EXTERNAL;
+          this.sessionService.updateSessionData(ctx.from.id, { channelType });
+          this.sessionService.nextStep(ctx.from.id);
+          this.sessionService.nextStep(ctx.from.id); // Skip step 1
+          await ctx.reply(
+            '📝 Kanal/Guruh nomini kiriting:\n\nMasalan: Instagram Sahifa',
+            AdminKeyboard.getCancelButton(),
+          );
+        }
+        break;
+
+      case 1: // Channel ID/Username (for PUBLIC/PRIVATE only)
+        const channelIdOrUsername = text.trim();
+        const data = session.data;
+
+        if (data.channelType === ChannelType.PUBLIC) {
+          // Validate public channel
+          if (
+            !channelIdOrUsername.startsWith('-') &&
+            !channelIdOrUsername.startsWith('@')
+          ) {
+            await ctx.reply(
+              "❌ Noto'g'ri format!\n\nKanal ID yoki username kiriting.\nMasalan: -1001234567890 yoki @mychannel",
+              AdminKeyboard.getCancelButton(),
+            );
+            return;
+          }
+        } else if (data.channelType === ChannelType.PRIVATE) {
+          // Validate private channel ID
+          if (!channelIdOrUsername.startsWith('-')) {
+            await ctx.reply(
+              "❌ Kanal ID noto'g'ri formatda!\n\nKanal ID '-' belgisi bilan boshlanishi kerak.\nMasalan: -1001234567890",
+              AdminKeyboard.getCancelButton(),
+            );
+            return;
+          }
         }
 
-        this.sessionService.updateSessionData(ctx.from.id, { channelId });
+        this.sessionService.updateSessionData(ctx.from.id, {
+          channelId: channelIdOrUsername,
+        });
         this.sessionService.nextStep(ctx.from.id);
         await ctx.reply(
           '🔗 Kanal linkini yuboring:\n\nMasalan: https://t.me/joinchat/abcd1234',
@@ -1547,31 +1645,80 @@ Qaysi guruhga xabar yubormoqchisiz?
         );
         break;
 
-      case 1: // Channel link
-        const channelLink = text.trim();
-        const data = session.data;
+      case 2: // Channel name (EXTERNAL) or link (PUBLIC/PRIVATE)
+        const input = text.trim();
+        const sessionData = session.data;
+
+        if (sessionData.channelType === ChannelType.EXTERNAL) {
+          // For EXTERNAL, this is the channel name
+          this.sessionService.updateSessionData(ctx.from.id, {
+            channelName: input,
+          });
+          this.sessionService.nextStep(ctx.from.id);
+          await ctx.reply(
+            '🔗 Linkni yuboring:\n\nMasalan:\n- https://instagram.com/username\n- https://youtube.com/@channel',
+            AdminKeyboard.getCancelButton(),
+          );
+        } else {
+          // For PUBLIC/PRIVATE, this is the link
+          const channelLink = input;
+
+          try {
+            // Get channel info
+            const chat = await ctx.api.getChat(sessionData.channelId);
+            const channelName =
+              'title' in chat ? chat.title : sessionData.channelId;
+
+            await this.channelService.createMandatoryChannel({
+              channelId: sessionData.channelId,
+              channelName,
+              channelLink,
+              type: sessionData.channelType,
+              isActive: true,
+            });
+
+            this.sessionService.clearSession(ctx.from.id);
+            await ctx.reply(
+              `✅ Majburiy kanal muvaffaqiyatli qo'shildi!\n\n` +
+                `📢 ${channelName}\n` +
+                `🔗 ${channelLink}\n` +
+                `📁 Turi: ${sessionData.channelType === 'PUBLIC' ? 'Public kanal' : 'Private kanal'}`,
+              AdminKeyboard.getAdminMainMenu(admin.role),
+            );
+          } catch (error) {
+            this.logger.error('Failed to create mandatory channel', error);
+            await ctx.reply(
+              "❌ Kanal qo'shishda xatolik yuz berdi.\n\nBotning kanalda admin ekanligiga ishonch hosil qiling va qaytadan urinib ko'ring.",
+              AdminKeyboard.getCancelButton(),
+            );
+          }
+        }
+        break;
+
+      case 3: // Link for EXTERNAL type
+        const externalLink = text.trim();
+        const extData = session.data;
 
         try {
-          // Get channel info
-          const chat = await ctx.api.getChat(data.channelId);
-          const channelName = 'title' in chat ? chat.title : data.channelId;
-
           await this.channelService.createMandatoryChannel({
-            channelId: data.channelId,
-            channelName,
-            channelLink,
+            channelName: extData.channelName,
+            channelLink: externalLink,
+            type: ChannelType.EXTERNAL,
             isActive: true,
           });
 
           this.sessionService.clearSession(ctx.from.id);
           await ctx.reply(
-            `✅ Majburiy kanal muvaffaqiyatli qo'shildi!\n\n📢 ${channelName}\n🔗 ${channelLink}`,
+            `✅ Tashqi link muvaffaqiyatli qo'shildi!\n\n` +
+              `📢 ${extData.channelName}\n` +
+              `🔗 ${externalLink}\n` +
+              `📁 Turi: Tashqi link`,
             AdminKeyboard.getAdminMainMenu(admin.role),
           );
         } catch (error) {
-          this.logger.error('Failed to create mandatory channel', error);
+          this.logger.error('Failed to create external channel', error);
           await ctx.reply(
-            "❌ Kanal qo'shishda xatolik yuz berdi.\n\nBotning kanalda admin ekanligiga ishonch hosil qiling va qaytadan urinib ko'ring.",
+            "❌ Link qo'shishda xatolik yuz berdi.\n\nIltimos, qaytadan urinib ko'ring.",
             AdminKeyboard.getCancelButton(),
           );
         }
@@ -1746,6 +1893,56 @@ Qaysi guruhga xabar yubormoqchisiz?
     const admin = await this.getAdmin(ctx);
     if (!admin || !ctx.from) return;
 
+    // Check if we're in episode uploading step
+    if (session.step === 6) {
+      // UPLOADING_EPISODES step (new serial)
+      if (text.includes('qism yuklash') || text === '✅ Tugatish') {
+        await this.serialManagementService.handleContinueOrFinish(ctx, text);
+        return;
+      } else if (text === '✅ Ha, field kanalga tashla') {
+        await this.serialManagementService.finalizNewSerial(ctx, true);
+        return;
+      } else if (text === "❌ Yo'q, faqat saqlash") {
+        await this.serialManagementService.finalizNewSerial(ctx, false);
+        return;
+      }
+    }
+
+    // Check if we're adding episodes to existing serial
+    if (session.step === 7) {
+      // ADDING_EPISODES step (existing serial)
+      if (text.includes('qism yuklash') || text === '✅ Tugatish') {
+        if (text === '✅ Tugatish') {
+          // Ask about updating field channel
+          const keyboard = new Keyboard()
+            .text('✅ Ha, field kanalga yangilash')
+            .row()
+            .text("❌ Yo'q, faqat saqlash")
+            .resized();
+
+          await ctx.reply(
+            '📺 Qismlar tayyorlandi!\n\nField kanaldagi posterni yangilashmi?',
+            { reply_markup: keyboard },
+          );
+          return;
+        } else {
+          // Continue adding more episodes
+          const data = session.data;
+          await ctx.reply(
+            `📹 ${data.nextEpisodeNumber}-qism videosini yuboring:`,
+            AdminKeyboard.getCancelButton(),
+          );
+          return;
+        }
+      } else if (text === '✅ Ha, field kanalga yangilash') {
+        await this.serialManagementService.finalizeAddingEpisodes(ctx, true);
+        return;
+      } else if (text === "❌ Yo'q, faqat saqlash") {
+        await this.serialManagementService.finalizeAddingEpisodes(ctx, false);
+        return;
+      }
+    }
+
     switch (session.step) {
       case SerialCreateStep.CODE:
         const code = parseInt(text);
@@ -1765,21 +1962,31 @@ Qaysi guruhga xabar yubormoqchisiz?
           this.sessionService.updateSessionData(ctx.from.id, {
             existingSerial,
             code,
+            serial: existingSerial,
+            nextEpisodeNumber: existingSerial.totalEpisodes + 1,
+            addedEpisodes: [],
           });
-          this.sessionService.nextStep(ctx.from.id);
+          this.sessionService.setStep(ctx.from.id, 7); // Special step for adding episodes
 
-          const keyboard = new Keyboard()
-            .text("➕ Yangi qism qo'shish")
-            .row()
-            .text('❌ Bekor qilish')
-            .resized();
+          // Send serial poster with info
+          const message = `
+📺 **${existingSerial.title}**
 
+${existingSerial.description || ''}
+
+🎭 Janr: ${existingSerial.genre}
+📊 Hozirda qismlari: ${existingSerial.totalEpisodes}
+🆔 Kod: ${existingSerial.code}
+
+📹 Keyingi qism (${existingSerial.totalEpisodes + 1}-qism) videosini yuboring:
+          `.trim();
+
+          await ctx.replyWithPhoto(existingSerial.posterFileId, {
+            caption: message,
+          });
           await ctx.reply(
-            `📺 Serial topildi!\n\n` +
-              `🏷 Nomi: ${existingSerial.title}\n` +
-              `📊 Jami qismlar: ${existingSerial.totalEpisodes}\n\n` +
-              `Yangi qism qo'shish uchun tugmani bosing:`,
-            { reply_markup: keyboard },
+            '📹 Videoni yuboring:',
+            AdminKeyboard.getCancelButton(),
           );
           return;
         }
@@ -1951,6 +2158,7 @@ Qaysi guruhga xabar yubormoqchisiz?
     if (!admin) return;
 
     const broadcastType = session.data.broadcastType;
+    const message = ctx.message;
 
     // Start broadcasting
     await ctx.reply('📤 Xabar yuborilmoqda... Iltimos kuting.');
@@ -1975,9 +2183,18 @@ Qaysi guruhga xabar yubormoqchisiz?
 
       for (const user of users) {
         try {
-          await ctx.api.sendMessage(user.telegramId, text, {
-            parse_mode: 'Markdown',
-          });
+          // Forward message to preserve "forward from" metadata
+          if (message) {
+            await ctx.api.copyMessage(
+              user.telegramId,
+              ctx.chat.id,
+              message.message_id,
+              { protect_content: false },
+            );
+          } else {
+            // Fallback to sending text
+            await ctx.api.sendMessage(user.telegramId, text);
+          }
           successCount++;
 
           // Delay to avoid flood

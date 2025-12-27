@@ -1,0 +1,48 @@
+version: '3.8'
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: aziz_bot_app
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - BOT_TOKEN=${BOT_TOKEN}
+      - BOT_USERNAME=${BOT_USERNAME}
+      - DATABASE_URL=${DATABASE_URL}
+    depends_on:
+      - postgres
+    networks:
+      - bot-network
+    volumes:
+      - ./logs:/app/logs
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: aziz_bot_postgres
+    restart: unless-stopped
+    environment:
+      - POSTGRES_USER=${DB_USER:-azizbot}
+      - POSTGRES_PASSWORD=${DB_PASSWORD}
+      - POSTGRES_DB=${DB_NAME:-aziz_bot_db}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - bot-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-azizbot}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+networks:
+  bot-network:
+    driver: bridge
+
+volumes:
+  postgres_data:
+    driver: local

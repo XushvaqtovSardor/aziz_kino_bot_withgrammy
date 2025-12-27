@@ -113,16 +113,24 @@ model DatabaseChannel {
   
   @@index([channelId])
 }
+enum ChannelType {
+  PUBLIC   // Public channel with ID/link and name
+  PRIVATE  // Private channel with ID (requires member)
+  EXTERNAL // External link (Instagram, YouTube, etc.)
+}
+
 model MandatoryChannel {
-  id          Int      @id @default(autoincrement())
-  channelId   String   @unique
+  id          Int         @id @default(autoincrement())
+  type        ChannelType @default(PUBLIC)
+  channelId   String?     // For PUBLIC/PRIVATE (nullable for EXTERNAL)
   channelName String
   channelLink String
-  order       Int      @default(0)
-  isActive    Boolean  @default(true)
-  createdAt   DateTime @default(now())
+  order       Int         @default(0)
+  isActive    Boolean     @default(true)
+  createdAt   DateTime    @default(now())
   
   @@index([isActive])
+  @@index([type])
 }
 model Movie {
   id                Int            @id @default(autoincrement())
@@ -157,6 +165,7 @@ model Serial {
   code                Int            @unique
   title               String
   posterFileId        String
+  channelMessageId    Int?
   description         String?        @db.Text
   genre               String?
   totalEpisodes       Int            @default(0)
@@ -250,16 +259,18 @@ model BotSettings {
   updatedAt              DateTime @updatedAt
 }
 model Broadcast {
-  id          Int              @id @default(autoincrement())
-  type        BroadcastType
-  messageText String           @db.Text
-  mediaFileId String?
-  status      BroadcastStatus  @default(PENDING)
-  sentCount   Int              @default(0)
-  failedCount Int              @default(0)
-  completedAt DateTime?
-  createdBy   String
-  createdAt   DateTime         @default(now())
+  id            Int              @id @default(autoincrement())
+  type          BroadcastType
+  messageText   String           @db.Text
+  mediaFileId   String?
+  fromChatId    String?          // For forward preservation
+  fromMessageId Int?             // For forward preservation
+  status        BroadcastStatus  @default(PENDING)
+  sentCount     Int              @default(0)
+  failedCount   Int              @default(0)
+  completedAt   DateTime?
+  createdBy     String
+  createdAt     DateTime         @default(now())
   
   @@index([createdAt])
   @@index([status])

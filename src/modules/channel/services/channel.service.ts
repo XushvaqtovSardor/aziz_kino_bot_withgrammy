@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../../prisma/prisma.service';
+import { ChannelType } from '@prisma/client';
 import { Api } from 'grammy';
 
 export interface SubscriptionStatus {
@@ -107,16 +108,18 @@ export class ChannelService {
   }
 
   async createMandatoryChannel(data: {
-    channelId: string;
+    channelId?: string;
     channelName: string;
     channelLink: string;
+    type: ChannelType;
     isActive?: boolean;
   }) {
     return this.prisma.mandatoryChannel.create({
       data: {
-        channelId: data.channelId,
+        channelId: data.channelId || null,
         channelName: data.channelName,
         channelLink: data.channelLink,
+        type: data.type,
         isActive: data.isActive ?? true,
         order: 0,
       },

@@ -37,6 +37,51 @@ export class SerialService {
     });
   }
 
+  async findById(id: number) {
+    return this.prisma.serial.findUnique({
+      where: { id },
+      include: {
+        field: true,
+        episodes: {
+          orderBy: { episodeNumber: 'asc' },
+        },
+      },
+    });
+  }
+
+  async findNearestAvailableCodes(
+    targetCode: number,
+    limit: number = 5,
+  ): Promise<number[]> {
+    // Find all codes in database
+    const existingSerials = await this.prisma.serial.findMany({
+      select: { code: true },
+      orderBy: { code: 'asc' },
+    });
+
+    const usedCodes = new Set(existingSerials.map((s) => s.code));
+    const availableCodes: number[] = [];
+
+    // Search for available codes near targetCode
+    let offset = 1;
+    while (availableCodes.length < limit && offset <= 1000) {
+      const lowerCode = targetCode - offset;
+      const upperCode = targetCode + offset;
+
+      if (lowerCode > 0 && !usedCodes.has(lowerCode)) {
+        availableCodes.push(lowerCode);
+      }
+
+      if (!usedCodes.has(upperCode)) {
+        availableCodes.push(upperCode);
+      }
+
+      offset++;
+    }
+
+    return availableCodes.slice(0, limit).sort((a, b) => a - b);
+  }
+
   async findAll(fieldId?: number) {
     return this.prisma.serial.findMany({
       where: fieldId ? { fieldId } : undefined,

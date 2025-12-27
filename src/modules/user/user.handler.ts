@@ -77,6 +77,9 @@ export class UserHandler implements OnModuleInit {
       this.handleShareSerial.bind(this),
     );
 
+    // Inline query handler for sharing
+    bot.on('inline_query', this.handleInlineQuery.bind(this));
+
     // Handle text messages (for code search)
     bot.on('message:text', this.handleTextMessage.bind(this));
   }
@@ -100,25 +103,11 @@ export class UserHandler implements OnModuleInit {
     const premiumStatus = await this.premiumService.checkPremiumStatus(user.id);
     const isPremium = premiumStatus.isPremium && !premiumStatus.isExpired;
 
-    // Handle deep link (start=movie_123 or start=serial_456)
+    // Handle deep link (start=123 for movie or start=s123 for serial)
     if (typeof payload === 'string' && payload.length > 0) {
-      if (payload.startsWith('movie_')) {
-        const code = parseInt(payload.replace('movie_', ''));
-        if (!isNaN(code)) {
-          // Check subscription first
-          if (!isPremium) {
-            const hasSubscription = await this.checkSubscription(
-              ctx,
-              code,
-              'movie',
-            );
-            if (!hasSubscription) return;
-          }
-          await this.sendMovieToUser(ctx, code);
-          return;
-        }
-      } else if (payload.startsWith('serial_')) {
-        const code = parseInt(payload.replace('serial_', ''));
+      // Check if it's a serial (starts with 's')
+      if (payload.startsWith('s')) {
+        const code = parseInt(payload.substring(1));
         if (!isNaN(code)) {
           // Check subscription first
           if (!isPremium) {
@@ -130,6 +119,22 @@ export class UserHandler implements OnModuleInit {
             if (!hasSubscription) return;
           }
           await this.sendSerialToUser(ctx, code);
+          return;
+        }
+      } else {
+        // It's a movie (just the code number)
+        const code = parseInt(payload);
+        if (!isNaN(code)) {
+          // Check subscription first
+          if (!isPremium) {
+            const hasSubscription = await this.checkSubscription(
+              ctx,
+              code,
+              'movie',
+            );
+            if (!hasSubscription) return;
+          }
+          await this.sendMovieToUser(ctx, code);
           return;
         }
       }
@@ -511,7 +516,12 @@ ${movie.genre ? `🎭 Janr: ${movie.genre}\n` : ''}${movie.year ? `📅 Yil: ${m
         try {
           const videoData = JSON.parse(movie.videoMessageId || '[]');
           if (videoData.length > 0) {
-            // Forward from database channel
+            // Forward from database channel with share button
+            const shareKeyboard = new InlineKeyboard().switchInline(
+              '📤 Share qilish',
+              `${movie.code}`,
+            );
+
             for (const video of videoData) {
               await ctx.api.copyMessage(
                 ctx.from.id,
@@ -519,16 +529,23 @@ ${movie.genre ? `🎭 Janr: ${movie.genre}\n` : ''}${movie.year ? `📅 Yil: ${m
                 video.messageId,
                 {
                   protect_content: true, // Disable forwarding
+                  reply_markup: shareKeyboard,
                 },
               );
             }
           }
         } catch (error) {
-          // If not JSON, send directly
+          // If not JSON, send directly with share button
           if (movie.videoFileId) {
+            const shareKeyboard = new InlineKeyboard().switchInline(
+              '📤 Share qilish',
+              `${movie.code}`,
+            );
+
             await ctx.replyWithVideo(movie.videoFileId, {
               caption: `🎬 ${movie.title}`,
               protect_content: true,
+              reply_markup: shareKeyboard,
             });
           }
         }
@@ -741,24 +758,34 @@ ${serial.genre ? `🎭 Janr: ${serial.genre}\n` : ''}${serial.description ? `\n�
         return;
       }
 
-      // Send episode video
+      // Send episode video with share button
+      const serial = await this.serialService.findById(serialId);
+      const shareKeyboard = new InlineKeyboard().switchInline(
+        '📤 Share qilish',
+        `s${serial.code}`,
+      );
+
       if (episode.videoFileId) {
         await ctx.replyWithVideo(episode.videoFileId, {
           caption: `📺 ${episode.title || `Qism ${episode.episodeNumber}`}`,
           protect_content: true,
+          reply_markup: shareKeyboard,
         });
       } else if (episode.videoMessageId) {
         // Try to copy from channel
         try {
           const videoData = JSON.parse(episode.videoMessageId);
-          await ctx.api.copyMessage(
-            ctx.from.id,
-            videoData.channelId,
-            videoData.messageId,
-            {
-              protect_content: true,
-            },
-          );
+          if (Array.isArray(videoData) && videoData.length > 0) {
+            await ctx.api.copyMessage(
+              ctx.from.id,
+              videoData[0].channelId,
+              videoData[0].messageId,
+              {
+                protect_content: true,
+                reply_markup: shareKeyboard,
+              },
+            );
+          }
         } catch (error) {
           this.logger.error('Error copying episode video:', error);
           await ctx.reply('❌ Video yuklashda xatolik.');
@@ -814,7 +841,7 @@ ${serial.genre ? `🎭 Janr: ${serial.genre}\n` : ''}${serial.description ? `\n�
 
     const code = parseInt(ctx.callbackQuery.data.replace('share_movie_', ''));
     const botUsername = (await ctx.api.getMe()).username;
-    const shareLink = `https://t.me/${botUsername}?start=movie_${code}`;
+    const shareLink = `${code}`;
 
     await ctx.answerCallbackQuery({
       text: 'Pastdagi tugmani bosib ulashing!',
@@ -840,7 +867,7 @@ ${serial.genre ? `🎭 Janr: ${serial.genre}\n` : ''}${serial.description ? `\n�
 
     const code = parseInt(ctx.callbackQuery.data.replace('share_serial_', ''));
     const botUsername = (await ctx.api.getMe()).username;
-    const shareLink = `https://t.me/${botUsername}?start=serial_${code}`;
+    const shareLink = `s${code}`;
 
     await ctx.answerCallbackQuery({
       text: 'Pastdagi tugmani bosib ulashing!',
@@ -859,5 +886,78 @@ ${serial.genre ? `🎭 Janr: ${serial.genre}\n` : ''}${serial.description ? `\n�
         reply_markup: keyboard,
       },
     );
+  }
+
+  // ==================== INLINE QUERY HANDLER ====================
+  private async handleInlineQuery(ctx: BotContext) {
+    if (!ctx.inlineQuery) return;
+
+    const query = ctx.inlineQuery.query.trim();
+
+    // Parse query: "123" for movie or "s123" for serial
+    const serialMatch = query.match(/^s(\d+)$/i);
+    const movieMatch = !serialMatch ? query.match(/^(\d+)$/) : null;
+
+    const results: any[] = [];
+
+    try {
+      if (movieMatch) {
+        const code = parseInt(movieMatch[1]);
+        const movie = await this.movieService.findByCode(String(code));
+
+        if (movie) {
+          const botUsername = (await ctx.api.getMe()).username;
+          const shareLink = `https://t.me/${botUsername}?start=${code}`;
+
+          results.push({
+            type: 'article',
+            id: `movie_${code}`,
+            title: `🎬 ${movie.title}`,
+            description: movie.description || "Kinoni ko'rish",
+            input_message_content: {
+              message_text: `🎬 **${movie.title}**\n\n${movie.description || ''}\n\n🆔 Kod: ${code}\n\n👇 Ko'rish uchun pastdagi tugmani bosing:`,
+              parse_mode: 'Markdown',
+            },
+            reply_markup: new InlineKeyboard().url(
+              '▶️ Tomosha qilish',
+              shareLink,
+            ),
+          });
+        }
+      }
+
+      if (serialMatch) {
+        const code = parseInt(serialMatch[1]);
+        const serial = await this.serialService.findByCode(String(code));
+
+        if (serial) {
+          const botUsername = (await ctx.api.getMe()).username;
+          const shareLink = `https://t.me/${botUsername}?start=s${code}`;
+
+          results.push({
+            type: 'article',
+            id: `serial_${code}`,
+            title: `📺 ${serial.title}`,
+            description: serial.description || "Serialni ko'rish",
+            input_message_content: {
+              message_text: `📺 **${serial.title}**\n\n${serial.description || ''}\n\n📊 Qismlar: ${serial.totalEpisodes}\n🆔 Kod: ${code}\n\n👇 Ko'rish uchun pastdagi tugmani bosing:`,
+              parse_mode: 'Markdown',
+            },
+            reply_markup: new InlineKeyboard().url(
+              '▶️ Tomosha qilish',
+              shareLink,
+            ),
+          });
+        }
+      }
+
+      await ctx.answerInlineQuery(results, {
+        cache_time: 300,
+        is_personal: true,
+      });
+    } catch (error) {
+      this.logger.error('Error handling inline query:', error);
+      await ctx.answerInlineQuery([]);
+    }
   }
 }
