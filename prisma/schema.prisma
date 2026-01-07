@@ -120,7 +120,7 @@ enum ChannelType {
 }
 
 model MandatoryChannel {
-<<<<<<< HEAD
+
   id            Int         @id @default(autoincrement())
   type          ChannelType @default(PUBLIC)
   channelId     String?     // For PUBLIC/PRIVATE (nullable for EXTERNAL)
@@ -132,16 +132,6 @@ model MandatoryChannel {
   currentMembers Int        @default(0) // Current member count
   pendingRequests Int       @default(0) // Pending join requests for PRIVATE channels
   createdAt     DateTime    @default(now())
-=======
-  id          Int         @id @default(autoincrement())
-  type        ChannelType @default(PUBLIC)
-  channelId   String?     // For PUBLIC/PRIVATE (nullable for EXTERNAL)
-  channelName String
-  channelLink String
-  order       Int         @default(0)
-  isActive    Boolean     @default(true)
-  createdAt   DateTime    @default(now())
->>>>>>> 9e7ed34722035ce8c5e304e50c0ff830bf2359f3
   
   @@index([isActive])
   @@index([type])
@@ -267,10 +257,8 @@ model PremiumSettings {
 model BotSettings {
   id                     Int      @id @default(autoincrement())
   aboutBot               String   @db.Text
-<<<<<<< HEAD
+
   contactMessage         String?  @db.Text
-=======
->>>>>>> 9e7ed34722035ce8c5e304e50c0ff830bf2359f3
   supportUsername        String
   adminNotificationChat  String
   welcomeMessage         String   @db.Text
