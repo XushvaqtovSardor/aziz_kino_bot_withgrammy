@@ -566,16 +566,14 @@ Savollaringiz bo'lsa murojaat qiling:
       const botUsername = (await ctx.api.getMe()).username;
       const field = await this.fieldService.findOne(movie.fieldId);
 
-      const caption = `
-╭────────────────────
+      const caption = `╭────────────────────
 ├‣  Kino nomi: ${movie.title}
 ├‣  Kino kodi: ${movie.code}
 ├‣  Qism: 1
 ├‣  Janrlari: ${movie.genre || "Noma'lum"}
 ├‣  Kanal: ${field?.channelLink || '@' + (field?.name || 'Kanal')}
 ╰────────────────────
-▶️ Kinoning to'liq qismini https://t.me/${botUsername}?start=${movie.code} dan tomosha qilishingiz mumkin!
-      `.trim();
+▶️ Kinoning to'liq qismini https://t.me/${botUsername}?start=${movie.code} dan tomosha qilishingiz mumkin!`;
 
       if (movie.videoFileId) {
         // Share button for user
