@@ -1,0 +1,21 @@
+[phases.setup]
+nixPkgs = ['nodejs-20_x', 'pnpm']
+
+[phases.install]
+cmds = [
+  'pnpm install --frozen-lockfile',
+  'pnpm prisma generate'
+]
+
+[phases.build]
+cmds = [
+  'pnpm prisma generate',
+  'pnpm run build'
+]
+
+[start]
+cmd = 'node --max-old-space-size=512 dist/main'
+
+[variables]
+PORT = '3000'
+NODE_ENV = 'production'
