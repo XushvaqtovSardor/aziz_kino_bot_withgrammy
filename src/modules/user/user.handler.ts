@@ -570,7 +570,7 @@ Savollaringiz bo'lsa murojaat qiling:
 ├‣  Kino nomi: ${movie.title}
 ├‣  Kino kodi: ${movie.code}
 ├‣  Qism: 1
-├‣  Janrlari: ${movie.genre || "Noma'lum"}
+├‣  Janrlari: ${movie.genre || 'Nomalum'}
 ├‣  Kanal: ${field?.channelLink || '@' + (field?.name || 'Kanal')}
 ╰────────────────────
 ▶️ Kinoning to'liq qismini https://t.me/${botUsername}?start=${movie.code} dan tomosha qilishingiz mumkin!`;
@@ -585,8 +585,9 @@ Savollaringiz bo'lsa murojaat qiling:
 
         // Send video with caption directly
         this.logger.log(`[sendMovieToUser] Sending video with caption`);
+        const safeCaption = caption.slice(0, 1024);
         await ctx.replyWithVideo(movie.videoFileId, {
-          caption: caption,
+          caption: safeCaption,
           protect_content: true,
           reply_markup: shareKeyboard,
           // parse_mode: 'Markdown',
@@ -594,6 +595,7 @@ Savollaringiz bo'lsa murojaat qiling:
         this.logger.log(
           `[sendMovieToUser] Video sent successfully with caption`,
         );
+        this.logger.log(`CAPTION LENGTH = ${caption.length}`);
 
         // Record watch history
         await this.watchHistoryService.recordMovieWatch(user.id, movie.id);
