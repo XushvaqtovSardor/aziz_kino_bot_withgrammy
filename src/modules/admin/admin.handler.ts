@@ -538,11 +538,12 @@ export class AdminHandler implements OnModuleInit {
           const dbCaption = `
 ╭────────────────────
 ├‣  Kino nomi: ${data.title}
-├‣  Kino raqami: ${data.code}
+├‣  Kino kodi: ${data.code}
 ├‣  Qism: ${data.episodeCount || 1}
 ├‣  Janrlari: ${data.genre}
 ├‣  Kanal: ${field.channelLink || '@' + field.name}
 ╰────────────────────
+▶️ Kinoning to'liq qismini https://t.me/${this.grammyBot.botUsername}?start=${data.code} dan tomosha qilishingiz mumkin!
           `.trim();
 
           const sentVideo = await ctx.api.sendVideo(
