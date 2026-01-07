@@ -591,7 +591,7 @@ Savollaringiz bo'lsa murojaat qiling:
           caption: caption,
           protect_content: true,
           reply_markup: shareKeyboard,
-          parse_mode: 'Markdown',
+          // parse_mode: 'Markdown',
         });
         this.logger.log(
           `[sendMovieToUser] Video sent successfully with caption`,
