@@ -78,11 +78,19 @@ export class UserHandler implements OnModuleInit {
     // Inline query handler for sharing
     bot.on('inline_query', this.handleInlineQuery.bind(this));
 
-    // Handle text messages (for code search) - Will be called after admin handler's next()
-    bot.on('message:text', this.handleTextMessage.bind(this));
-
     // Handle chat join requests (for private channels)
     bot.on('chat_join_request', this.handleJoinRequest.bind(this));
+
+    // NOTE: message:text is handled by admin.handler.ts middleware first
+    // If admin has no session, it calls next() which then triggers bot.use()
+    // We register handleTextMessage via bot.use() to be called after admin middleware
+    bot.use(async (ctx, next) => {
+      if (ctx.message && 'text' in ctx.message) {
+        await this.handleTextMessage(ctx);
+      } else {
+        await next();
+      }
+    });
   }
 
   // ==================== START COMMAND ====================
