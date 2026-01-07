@@ -562,14 +562,13 @@ Savollaringiz bo'lsa murojaat qiling:
       const user = await this.userService.findByTelegramId(String(ctx.from.id));
       if (!user) return;
 
-      // Send video directly without poster
+      // Prepare caption with movie info
       const botUsername = (await ctx.api.getMe()).username;
       const field = await this.fieldService.findOne(movie.fieldId);
 
-      // Show info message before video
-      const infoMessage = `
+      const caption = `
 ╭────────────────────
-├‣  Kino nomi : ${movie.title}
+├‣  Kino nomi: ${movie.title}
 ├‣  Kino kodi: ${movie.code}
 ├‣  Qism: 1
 ├‣  Janrlari: ${movie.genre || "Noma'lum"}
@@ -578,69 +577,25 @@ Savollaringiz bo'lsa murojaat qiling:
 ▶️ Kinoning to'liq qismini https://t.me/${botUsername}?start=${movie.code} dan tomosha qilishingiz mumkin!
       `.trim();
 
-      await ctx.reply(infoMessage);
-      this.logger.log(`[sendMovieToUser] Info message sent`);
-
       if (movie.videoFileId) {
-        // Parse video messages if stored as JSON
-        try {
-          const videoData = JSON.parse(movie.videoMessageId || '[]');
-          this.logger.log(
-            `[sendMovieToUser] Parsed video data, count: ${videoData.length}`,
-          );
+        // Share button for user
+        const shareLink = `https://t.me/share/url?url=https://t.me/${botUsername}?start=${movie.code}&text=🎬 ${encodeURIComponent(movie.title)}\n\n📖 Kod: ${movie.code}\n\n👇 Kinoni tomosha qilish uchun bosing:`;
+        const shareKeyboard = new InlineKeyboard().url(
+          '📤 Share qilish',
+          shareLink,
+        );
 
-          if (videoData.length > 0) {
-            // Forward from database channel with share button
-            const botUsername = (await ctx.api.getMe()).username;
-            const shareLink = `https://t.me/share/url?url=https://t.me/${botUsername}?start=${movie.code}&text=🎬 ${encodeURIComponent(movie.title)}\n\n📖 Kod: ${movie.code}\n\n👇 Kinoni tomosha qilish uchun bosing:`;
-            const shareKeyboard = new InlineKeyboard().url(
-              '📤 Share qilish',
-              shareLink,
-            );
-
-            for (const video of videoData) {
-              this.logger.log(
-                `[sendMovieToUser] Copying video from channel ${video.channelId}, message ${video.messageId}`,
-              );
-              await ctx.api.copyMessage(
-                ctx.from.id,
-                video.channelId,
-                video.messageId,
-                {
-                  protect_content: true, // Disable forwarding
-                  reply_markup: shareKeyboard,
-                },
-              );
-              this.logger.log(`[sendMovieToUser] Video copied successfully`);
-            }
-          }
-        } catch (error) {
-          this.logger.error(
-            `[sendMovieToUser] Error parsing JSON or sending video:`,
-            error,
-          );
-          // If not JSON, send directly with share button
-          if (movie.videoFileId) {
-            this.logger.log(
-              `[sendMovieToUser] Fallback: sending video directly with file_id`,
-            );
-            const botUsername = (await ctx.api.getMe()).username;
-            const shareLink = `https://t.me/share/url?url=https://t.me/${botUsername}?start=${movie.code}&text=🎬 ${encodeURIComponent(movie.title)}\n\n📖 Kod: ${movie.code}\n\n👇 Kinoni tomosha qilish uchun bosing:`;
-            const shareKeyboard = new InlineKeyboard().url(
-              '📤 Share qilish',
-              shareLink,
-            );
-
-            await ctx.replyWithVideo(movie.videoFileId, {
-              caption: `🎬 ${movie.title}`,
-              protect_content: true,
-              reply_markup: shareKeyboard,
-            });
-            this.logger.log(
-              `[sendMovieToUser] Video sent successfully via fallback`,
-            );
-          }
-        }
+        // Send video with caption directly
+        this.logger.log(`[sendMovieToUser] Sending video with caption`);
+        await ctx.replyWithVideo(movie.videoFileId, {
+          caption: caption,
+          protect_content: true,
+          reply_markup: shareKeyboard,
+          parse_mode: 'Markdown',
+        });
+        this.logger.log(
+          `[sendMovieToUser] Video sent successfully with caption`,
+        );
 
         // Record watch history
         await this.watchHistoryService.recordMovieWatch(user.id, movie.id);
