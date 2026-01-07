@@ -585,12 +585,12 @@ Savollaringiz bo'lsa murojaat qiling:
 
         // Send video with caption directly
         this.logger.log(`[sendMovieToUser] Sending video with caption`);
-        const safeCaption = caption.slice(0, 1024);
+
         await ctx.replyWithVideo(movie.videoFileId, {
-          caption: safeCaption,
+          caption: caption,
           protect_content: true,
           reply_markup: shareKeyboard,
-          // parse_mode: 'Markdown',
+          parse_mode: 'Markdown',
         });
         this.logger.log(
           `[sendMovieToUser] Video sent successfully with caption`,
