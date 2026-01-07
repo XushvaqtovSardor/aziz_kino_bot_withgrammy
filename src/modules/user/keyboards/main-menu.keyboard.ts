@@ -3,6 +3,7 @@ import { LanguageTexts } from '../../language/interfaces/language-texts.interfac
 
 export class MainMenuKeyboard {
   static getMainMenu(isPremium: boolean = false) {
+<<<<<<< HEAD
     const keyboard = new Keyboard().text("🔍 Kino kodi bo'yicha qidirish");
 
     if (!isPremium) {
@@ -10,6 +11,24 @@ export class MainMenuKeyboard {
     }
 
     keyboard.row().text('ℹ️ Bot haqida').text('📞 Aloqa');
+=======
+    const keyboard = new Keyboard()
+      .text("🔍 Kino kodi bo'yicha qidirish")
+      .row()
+      .text("📁 Field kanallariga o'tish")
+      .row();
+
+    if (!isPremium) {
+      keyboard.text('💎 Premium sotib olish').row();
+    }
+
+    keyboard
+      .text('ℹ️ Bot haqida')
+      .text('👤 Profil')
+      .row()
+      .text('📞 Aloqa')
+      .text('⚙️ Sozlamalar');
+>>>>>>> 9e7ed34722035ce8c5e304e50c0ff830bf2359f3
 
     return { reply_markup: keyboard.resized() };
   }

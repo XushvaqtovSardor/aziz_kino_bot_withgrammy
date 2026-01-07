@@ -303,6 +303,7 @@ export class SerialManagementService {
       let posterMessageId = 0;
       if (postToField) {
         const caption = `
+<<<<<<< HEAD
 ╭────────────────────
 ├‣  Serial nomi : ${title}
 ├‣  Serial kodi: ${code}
@@ -311,6 +312,15 @@ export class SerialManagementService {
 ├‣  Kanal: ${selectedField.channelLink || '@' + selectedField.name}
 ╰────────────────────
 ▶️ Serialning to'liq qismlarini https://t.me/${this.grammyBot.botUsername}?start=s${code} dan tomosha qilishingiz mumkin!
+=======
+${title}
+
+${description || ''}
+
+📖 Qismlar: ${episodes.length}
+🎭 Janrlari: ${genre}
+🔖 Kanal: ${selectedField.channelLink || '@' + selectedField.name}
+>>>>>>> 9e7ed34722035ce8c5e304e50c0ff830bf2359f3
         `.trim();
 
         const keyboard = new InlineKeyboard().url(
@@ -472,6 +482,7 @@ export class SerialManagementService {
         const field = await this.fieldService.findOne(serial.fieldId);
         if (field) {
           const caption = `
+<<<<<<< HEAD
 ╭────────────────────
 ├‣  Serial nomi : ${serial.title}
 ├‣  Serial kodi: ${serial.code}
@@ -480,6 +491,15 @@ export class SerialManagementService {
 ├‣  Kanal: ${field.channelLink || '@' + field.name}
 ╰────────────────────
 ▶️ Serialning to'liq qismlarini https://t.me/${this.grammyBot.botUsername}?start=s${serial.code} dan tomosha qilishingiz mumkin!
+=======
+${serial.title}
+
+${serial.description || ''}
+
+📖 Qismlar: ${allEpisodes.length}
+🎭 Janrlari: ${serial.genre}
+🔖 Kanal: ${field.channelLink || '@' + field.name}
+>>>>>>> 9e7ed34722035ce8c5e304e50c0ff830bf2359f3
           `.trim();
 
           const keyboard = new InlineKeyboard().url(

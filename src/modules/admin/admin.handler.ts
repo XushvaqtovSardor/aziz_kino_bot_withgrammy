@@ -123,6 +123,7 @@ export class AdminHandler implements OnModuleInit {
       this.withAdminCheck(this.startAddMandatoryChannel.bind(this)),
     );
     bot.hears(
+<<<<<<< HEAD
       "📊 Tarixni ko'rish",
       this.withAdminCheck(this.showChannelHistory.bind(this)),
     );
@@ -135,6 +136,8 @@ export class AdminHandler implements OnModuleInit {
       this.withAdminCheck(this.startSearchChannelByLink.bind(this)),
     );
     bot.hears(
+=======
+>>>>>>> 9e7ed34722035ce8c5e304e50c0ff830bf2359f3
       '💾 Database kanallar',
       this.withAdminCheck(this.showDatabaseChannels.bind(this)),
     );
@@ -213,6 +216,7 @@ export class AdminHandler implements OnModuleInit {
       if (admin) await this.deleteAdmin(ctx);
     });
 
+<<<<<<< HEAD
     bot.callbackQuery(
       /^select_admin_role_(ADMIN|MANAGER|SUPERADMIN)_(.+)$/,
       async (ctx) => {
@@ -221,6 +225,8 @@ export class AdminHandler implements OnModuleInit {
       },
     );
 
+=======
+>>>>>>> 9e7ed34722035ce8c5e304e50c0ff830bf2359f3
     bot.callbackQuery('edit_prices', async (ctx) => {
       const admin = await this.getAdmin(ctx);
       if (admin) await this.startEditingPrices(ctx);
@@ -231,11 +237,14 @@ export class AdminHandler implements OnModuleInit {
       if (admin) await this.startEditingCard(ctx);
     });
 
+<<<<<<< HEAD
     bot.callbackQuery('edit_contact', async (ctx) => {
       const admin = await this.getAdmin(ctx);
       if (admin) await this.startEditingContactMessage(ctx);
     });
 
+=======
+>>>>>>> 9e7ed34722035ce8c5e304e50c0ff830bf2359f3
     bot.callbackQuery('back_to_admin_menu', async (ctx) => {
       const admin = await this.getAdmin(ctx);
       if (admin) await this.backToAdminMenu(ctx);
@@ -564,6 +573,7 @@ export class AdminHandler implements OnModuleInit {
 
       // Create movie caption with button for field channel (DMC style)
       const caption = `
+<<<<<<< HEAD
 ╭────────────────────
 ├‣  Kino nomi : ${data.title}
 ├‣  Kino kodi: ${data.code}
@@ -572,6 +582,15 @@ export class AdminHandler implements OnModuleInit {
 ├‣  Kanal: ${field.channelLink || '@' + field.name}
 ╰────────────────────
 ▶️ Kinoning to'liq qismini https://t.me/${this.grammyBot.botUsername}?start=${data.code} dan tomosha qilishingiz mumkin!
+=======
+${data.title}
+
+${data.description || ''}
+
+📖 Qism: ${data.episodeCount || 1}
+🎭 Janrlari: ${data.genre}
+🔖 Kanal: ${field.channelLink || '@' + field.name}
+>>>>>>> 9e7ed34722035ce8c5e304e50c0ff830bf2359f3
       `.trim();
 
       const keyboard = new InlineKeyboard().url(
@@ -677,6 +696,7 @@ export class AdminHandler implements OnModuleInit {
       case AdminState.EDIT_CARD_INFO:
         await this.handleCardEditingSteps(ctx, text, session);
         break;
+<<<<<<< HEAD
       case AdminState.EDIT_CONTACT_MESSAGE:
         await this.handleContactMessageEditing(ctx, text, session);
         break;
@@ -686,6 +706,11 @@ export class AdminHandler implements OnModuleInit {
       case AdminState.SEARCH_CHANNEL_BY_LINK:
         await this.searchChannelByLink(ctx, text);
         break;
+=======
+      case AdminState.BROADCASTING:
+        await this.handleBroadcastMessage(ctx, text, session);
+        break;
+>>>>>>> 9e7ed34722035ce8c5e304e50c0ff830bf2359f3
       default:
         this.logger.warn(`Unhandled session state: ${session.state}`);
         break;
@@ -1011,6 +1036,7 @@ export class AdminHandler implements OnModuleInit {
     channels.forEach((ch, i) => {
       message += `${i + 1}. ${ch.channelName}\n`;
       message += `   Link: ${ch.channelLink}\n`;
+<<<<<<< HEAD
       message += `   👥 A'zolar: ${ch.currentMembers}`;
       if (ch.memberLimit) {
         message += ` / ${ch.memberLimit}`;
@@ -1021,6 +1047,9 @@ export class AdminHandler implements OnModuleInit {
         message += `\n   ⏳ Kutilayotgan: ${ch.pendingRequests}`;
       }
       message += '\n\n';
+=======
+      message += `   ID: ${ch.channelId}\n\n`;
+>>>>>>> 9e7ed34722035ce8c5e304e50c0ff830bf2359f3
     });
 
     const inlineKeyboard = new InlineKeyboard();
@@ -1034,7 +1063,10 @@ export class AdminHandler implements OnModuleInit {
 
     const keyboard = new Keyboard()
       .text("➕ Majburiy kanal qo'shish")
+<<<<<<< HEAD
       .text("📊 Tarixni ko'rish")
+=======
+>>>>>>> 9e7ed34722035ce8c5e304e50c0ff830bf2359f3
       .row()
       .text('🔙 Orqaga')
       .resized();
@@ -1081,6 +1113,7 @@ export class AdminHandler implements OnModuleInit {
     await this.showMandatoryChannels(ctx);
   }
 
+<<<<<<< HEAD
   private async showChannelHistory(ctx: BotContext) {
     const admin = await this.getAdmin(ctx);
     if (!admin) return;
@@ -1243,6 +1276,8 @@ export class AdminHandler implements OnModuleInit {
     await ctx.reply('Tanlang:', AdminKeyboard.getAdminMainMenu(admin.role));
   }
 
+=======
+>>>>>>> 9e7ed34722035ce8c5e304e50c0ff830bf2359f3
   private async showDatabaseChannels(ctx: BotContext) {
     const admin = await this.getAdmin(ctx);
     if (!admin) return;
@@ -1458,6 +1493,7 @@ export class AdminHandler implements OnModuleInit {
     await this.showAdminsList(ctx);
   }
 
+<<<<<<< HEAD
   private async handleRoleSelection(ctx: BotContext) {
     const admin = await this.getAdmin(ctx);
     if (!admin || admin.role !== 'SUPERADMIN') {
@@ -1529,6 +1565,8 @@ export class AdminHandler implements OnModuleInit {
     }
   }
 
+=======
+>>>>>>> 9e7ed34722035ce8c5e304e50c0ff830bf2359f3
   // ==================== SETTINGS ====================
   private async showSettings(ctx: BotContext) {
     const admin = await this.getAdmin(ctx);
@@ -1563,8 +1601,11 @@ export class AdminHandler implements OnModuleInit {
       .row()
       .text("💳 Karta ma'lumotlarini o'zgartirish", 'edit_card')
       .row()
+<<<<<<< HEAD
       .text("📞 Aloqa bo'limini tahrirlash", 'edit_contact')
       .row()
+=======
+>>>>>>> 9e7ed34722035ce8c5e304e50c0ff830bf2359f3
       .text('🔙 Orqaga', 'back_to_admin_menu');
 
     await ctx.reply(message, {
@@ -1623,6 +1664,7 @@ export class AdminHandler implements OnModuleInit {
     await ctx.answerCallbackQuery();
   }
 
+<<<<<<< HEAD
   private async startEditingContactMessage(ctx: BotContext) {
     const admin = await this.getAdmin(ctx);
     if (!admin || admin.role !== 'SUPERADMIN') {
@@ -1693,6 +1735,8 @@ export class AdminHandler implements OnModuleInit {
     }
   }
 
+=======
+>>>>>>> 9e7ed34722035ce8c5e304e50c0ff830bf2359f3
   private async backToAdminMenu(ctx: BotContext) {
     const admin = await this.getAdmin(ctx);
     if (!admin) return;
@@ -1932,7 +1976,11 @@ Qaysi guruhga xabar yubormoqchisiz?
           this.sessionService.updateSessionData(ctx.from.id, { channelType });
           this.sessionService.nextStep(ctx.from.id);
           await ctx.reply(
+<<<<<<< HEAD
             '🔗 Kanal linkini yuboring:\n\nMasalan: https://t.me/mychannel',
+=======
+            '🆔 Kanal ID sini yoki @username ni yuboring:\n\nMasalan:\n- -1001234567890 (ID)\n- @mychannel (username)',
+>>>>>>> 9e7ed34722035ce8c5e304e50c0ff830bf2359f3
             AdminKeyboard.getCancelButton(),
           );
         } else if (text === '🔒 Private kanal') {
@@ -1940,22 +1988,34 @@ Qaysi guruhga xabar yubormoqchisiz?
           this.sessionService.updateSessionData(ctx.from.id, { channelType });
           this.sessionService.nextStep(ctx.from.id);
           await ctx.reply(
+<<<<<<< HEAD
             '🔗 Kanal invite linkini yuboring:\n\nMasalan: https://t.me/+abc123xyz',
+=======
+            "🆔 Kanal ID sini yuboring:\n\nKanal ID '-' belgisi bilan boshlanishi kerak.\nMasalan: -1001234567890",
+>>>>>>> 9e7ed34722035ce8c5e304e50c0ff830bf2359f3
             AdminKeyboard.getCancelButton(),
           );
         } else if (text === '🔗 Boshqa link') {
           channelType = ChannelType.EXTERNAL;
           this.sessionService.updateSessionData(ctx.from.id, { channelType });
+<<<<<<< HEAD
           // Skip Step 1 (ID verification) for external channels - they don't need Telegram ID
           this.sessionService.nextStep(ctx.from.id); // Go to step 1
           this.sessionService.nextStep(ctx.from.id); // Then skip to step 2
           await ctx.reply(
             '📝 Kanal/Guruh nomini kiriting:\n\nMasalan: Instagram Sahifam, YouTube Kanal',
+=======
+          this.sessionService.nextStep(ctx.from.id);
+          this.sessionService.nextStep(ctx.from.id); // Skip step 1
+          await ctx.reply(
+            '📝 Kanal/Guruh nomini kiriting:\n\nMasalan: Instagram Sahifa',
+>>>>>>> 9e7ed34722035ce8c5e304e50c0ff830bf2359f3
             AdminKeyboard.getCancelButton(),
           );
         }
         break;
 
+<<<<<<< HEAD
       case 1: // Channel link (for PUBLIC/PRIVATE)
         const channelLink = text.trim();
         const data = session.data;
@@ -1968,10 +2028,25 @@ Qaysi guruhga xabar yubormoqchisiz?
               "❌ Kanal ID noto'g'ri formatda!\n\n" +
                 "Kanal ID '-' belgisi bilan boshlanishi kerak.\n" +
                 'Masalan: -1001234567890',
+=======
+      case 1: // Channel ID/Username (for PUBLIC/PRIVATE only)
+        const channelIdOrUsername = text.trim();
+        const data = session.data;
+
+        if (data.channelType === ChannelType.PUBLIC) {
+          // Validate public channel
+          if (
+            !channelIdOrUsername.startsWith('-') &&
+            !channelIdOrUsername.startsWith('@')
+          ) {
+            await ctx.reply(
+              "❌ Noto'g'ri format!\n\nKanal ID yoki username kiriting.\nMasalan: -1001234567890 yoki @mychannel",
+>>>>>>> 9e7ed34722035ce8c5e304e50c0ff830bf2359f3
               AdminKeyboard.getCancelButton(),
             );
             return;
           }
+<<<<<<< HEAD
 
           try {
             // Verify channel exists and bot is admin
@@ -2135,17 +2210,46 @@ Qaysi guruhga xabar yubormoqchisiz?
         break;
 
       case 2: // Limit selection (PUBLIC/PRIVATE) or External name
+=======
+        } else if (data.channelType === ChannelType.PRIVATE) {
+          // Validate private channel ID
+          if (!channelIdOrUsername.startsWith('-')) {
+            await ctx.reply(
+              "❌ Kanal ID noto'g'ri formatda!\n\nKanal ID '-' belgisi bilan boshlanishi kerak.\nMasalan: -1001234567890",
+              AdminKeyboard.getCancelButton(),
+            );
+            return;
+          }
+        }
+
+        this.sessionService.updateSessionData(ctx.from.id, {
+          channelId: channelIdOrUsername,
+        });
+        this.sessionService.nextStep(ctx.from.id);
+        await ctx.reply(
+          '🔗 Kanal linkini yuboring:\n\nMasalan: https://t.me/joinchat/abcd1234',
+          AdminKeyboard.getCancelButton(),
+        );
+        break;
+
+      case 2: // Channel name (EXTERNAL) or link (PUBLIC/PRIVATE)
+>>>>>>> 9e7ed34722035ce8c5e304e50c0ff830bf2359f3
         const input = text.trim();
         const sessionData = session.data;
 
         if (sessionData.channelType === ChannelType.EXTERNAL) {
+<<<<<<< HEAD
           // For EXTERNAL channels (Instagram, Facebook, etc.)
           // No ID verification needed - these are not Telegram channels
+=======
+          // For EXTERNAL, this is the channel name
+>>>>>>> 9e7ed34722035ce8c5e304e50c0ff830bf2359f3
           this.sessionService.updateSessionData(ctx.from.id, {
             channelName: input,
           });
           this.sessionService.nextStep(ctx.from.id);
           await ctx.reply(
+<<<<<<< HEAD
             '🔗 Linkni yuboring:\n\nMasalan:\n- https://instagram.com/username\n- https://youtube.com/@channel\n- https://facebook.com/page',
             AdminKeyboard.getCancelButton(),
           );
@@ -2186,10 +2290,32 @@ Qaysi guruhga xabar yubormoqchisiz?
               type: ChannelType.EXTERNAL,
               isActive: true,
               memberLimit: null,
+=======
+            '🔗 Linkni yuboring:\n\nMasalan:\n- https://instagram.com/username\n- https://youtube.com/@channel',
+            AdminKeyboard.getCancelButton(),
+          );
+        } else {
+          // For PUBLIC/PRIVATE, this is the link
+          const channelLink = input;
+
+          try {
+            // Get channel info
+            const chat = await ctx.api.getChat(sessionData.channelId);
+            const channelName =
+              'title' in chat ? chat.title : sessionData.channelId;
+
+            await this.channelService.createMandatoryChannel({
+              channelId: sessionData.channelId,
+              channelName,
+              channelLink,
+              type: sessionData.channelType,
+              isActive: true,
+>>>>>>> 9e7ed34722035ce8c5e304e50c0ff830bf2359f3
             });
 
             this.sessionService.clearSession(ctx.from.id);
             await ctx.reply(
+<<<<<<< HEAD
               `✅ Tashqi link muvaffaqiyatli qo'shildi!\n\n` +
                 `📢 ${step3Data.channelName}\n` +
                 `🔗 ${step3Input}\n` +
@@ -2256,6 +2382,52 @@ Qaysi guruhga xabar yubormoqchisiz?
         "❌ Kanal qo'shishda xatolik yuz berdi.\n\nBotning kanalda admin ekanligiga ishonch hosil qiling.",
         AdminKeyboard.getCancelButton(),
       );
+=======
+              `✅ Majburiy kanal muvaffaqiyatli qo'shildi!\n\n` +
+                `📢 ${channelName}\n` +
+                `🔗 ${channelLink}\n` +
+                `📁 Turi: ${sessionData.channelType === 'PUBLIC' ? 'Public kanal' : 'Private kanal'}`,
+              AdminKeyboard.getAdminMainMenu(admin.role),
+            );
+          } catch (error) {
+            this.logger.error('Failed to create mandatory channel', error);
+            await ctx.reply(
+              "❌ Kanal qo'shishda xatolik yuz berdi.\n\nBotning kanalda admin ekanligiga ishonch hosil qiling va qaytadan urinib ko'ring.",
+              AdminKeyboard.getCancelButton(),
+            );
+          }
+        }
+        break;
+
+      case 3: // Link for EXTERNAL type
+        const externalLink = text.trim();
+        const extData = session.data;
+
+        try {
+          await this.channelService.createMandatoryChannel({
+            channelName: extData.channelName,
+            channelLink: externalLink,
+            type: ChannelType.EXTERNAL,
+            isActive: true,
+          });
+
+          this.sessionService.clearSession(ctx.from.id);
+          await ctx.reply(
+            `✅ Tashqi link muvaffaqiyatli qo'shildi!\n\n` +
+              `📢 ${extData.channelName}\n` +
+              `🔗 ${externalLink}\n` +
+              `📁 Turi: Tashqi link`,
+            AdminKeyboard.getAdminMainMenu(admin.role),
+          );
+        } catch (error) {
+          this.logger.error('Failed to create external channel', error);
+          await ctx.reply(
+            "❌ Link qo'shishda xatolik yuz berdi.\n\nIltimos, qaytadan urinib ko'ring.",
+            AdminKeyboard.getCancelButton(),
+          );
+        }
+        break;
+>>>>>>> 9e7ed34722035ce8c5e304e50c0ff830bf2359f3
     }
   }
 
@@ -2274,6 +2446,7 @@ Qaysi guruhga xabar yubormoqchisiz?
       const user = await ctx.api.getChat(telegramId);
       const username = 'username' in user ? user.username : undefined;
 
+<<<<<<< HEAD
       // Save user data in session
       this.sessionService.updateSessionData(ctx.from.id, {
         telegramId,
@@ -2326,6 +2499,24 @@ Qaysi rol berasiz?
       this.logger.error('Failed to get user info', error);
       await ctx.reply(
         "❌ Foydalanuvchi topilmadi yoki xatolik yuz berdi.\n\nIltimos, to'g'ri Telegram ID kiriting.",
+=======
+      await this.adminService.createAdmin({
+        telegramId,
+        username: username || telegramId,
+        role: 'ADMIN',
+        createdBy: admin.telegramId,
+      });
+
+      this.sessionService.clearSession(ctx.from.id);
+      await ctx.reply(
+        `✅ Admin muvaffaqiyatli qo'shildi!\n\n👤 ${username ? '@' + username : telegramId}\n🆔 ${telegramId}`,
+        AdminKeyboard.getAdminMainMenu(admin.role),
+      );
+    } catch (error) {
+      this.logger.error('Failed to create admin', error);
+      await ctx.reply(
+        "❌ Admin qo'shishda xatolik yuz berdi.\n\nIltimos, to'g'ri Telegram ID kiriting.",
+>>>>>>> 9e7ed34722035ce8c5e304e50c0ff830bf2359f3
         AdminKeyboard.getCancelButton(),
       );
     }

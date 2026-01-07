@@ -1,6 +1,7 @@
 #!/bin/bash
 
 # Digital Ocean deployment script for Aziz Bot
+<<<<<<< HEAD
 # Usage: ./deploy.sh [OPTIONS]
 # Options:
 #   --skip-build    Skip Docker image rebuild
@@ -70,11 +71,27 @@ if [ -d .git ]; then
   echo "📥 Pulling latest code..."
   git pull origin main || echo "⚠️  Git pull skipped"
 fi
+=======
+
+set -e
+
+echo "🚀 Starting deployment..."
+
+# Load environment variables
+if [ -f .env ]; then
+  export $(cat .env | grep -v '#' | xargs)
+fi
+
+# Pull latest changes
+echo "📥 Pulling latest code..."
+git pull origin main
+>>>>>>> 9e7ed34722035ce8c5e304e50c0ff830bf2359f3
 
 # Stop existing containers
 echo "⏹️  Stopping existing containers..."
 docker-compose down
 
+<<<<<<< HEAD
 # Clean up old images if not skipping build
 if [ "$SKIP_BUILD" = false ]; then
   echo "🗑️  Removing old images..."
@@ -107,10 +124,20 @@ while ! docker-compose exec -T postgres pg_isready -U "${DB_USER:-azizbot}" >/de
   sleep 2
 done
 echo "✅ Database is ready"
+=======
+# Remove old images
+echo "🗑️  Removing old images..."
+docker image prune -f
+
+# Build new images
+echo "🔨 Building new images..."
+docker-compose build --no-cache
+>>>>>>> 9e7ed34722035ce8c5e304e50c0ff830bf2359f3
 
 # Run database migrations
 echo "🗄️  Running database migrations..."
 docker-compose run --rm app pnpm prisma migrate deploy
+<<<<<<< HEAD
 echo "✅ Migrations completed"
 
 # Start all services
@@ -148,3 +175,13 @@ if [ "$NO_LOGS" = false ]; then
   echo "-----------------------------------"
   docker-compose logs -f --tail=50
 fi
+=======
+
+# Start services
+echo "▶️  Starting services..."
+docker-compose up -d
+
+# Show logs
+echo "📋 Showing logs..."
+docker-compose logs -f --tail=100
+>>>>>>> 9e7ed34722035ce8c5e304e50c0ff830bf2359f3

@@ -14,7 +14,11 @@ export class SettingsService {
           aboutBot: 'Bu kino bot',
           supportUsername: 'support',
           adminNotificationChat: '0',
+<<<<<<< HEAD
           welcomeMessage: '👋',
+=======
+          welcomeMessage: 'Xush kelibsiz!',
+>>>>>>> 9e7ed34722035ce8c5e304e50c0ff830bf2359f3
         },
       });
     }
@@ -49,6 +53,7 @@ export class SettingsService {
     });
   }
 
+<<<<<<< HEAD
   async updateContactMessage(contactMessage: string) {
     const settings = await this.getSettings();
 
@@ -58,6 +63,8 @@ export class SettingsService {
     });
   }
 
+=======
+>>>>>>> 9e7ed34722035ce8c5e304e50c0ff830bf2359f3
   async updateSettings(data: {
     aboutBot?: string;
     supportUsername?: string;

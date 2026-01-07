@@ -51,6 +51,7 @@ See [QUICKSTART.md](./QUICKSTART.md) for more details.
 
 ## 🐳 Docker Deployment
 
+<<<<<<< HEAD
 ### Railway (Recommended for beginners)
 
 **Easiest way to deploy!**
@@ -69,6 +70,9 @@ See [QUICKSTART.md](./QUICKSTART.md) for more details.
 See [RAILWAY.md](./RAILWAY.md) for detailed guide.
 
 ### Using Docker Compose
+=======
+### Using Docker Compose (Recommended)
+>>>>>>> 9e7ed34722035ce8c5e304e50c0ff830bf2359f3
 
 ```bash
 # Setup environment
