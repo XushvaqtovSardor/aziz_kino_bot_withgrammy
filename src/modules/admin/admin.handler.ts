@@ -533,11 +533,23 @@ export class AdminHandler implements OnModuleInit {
 
       for (const dbChannel of dbChannels) {
         try {
+          // Get field info for database channel caption
+          const field = data.selectedField;
+          const dbCaption = `
+╭────────────────────
+├‣  Kino nomi: ${data.title}
+├‣  Kino raqami: ${data.code}
+├‣  Qism: ${data.episodeCount || 1}
+├‣  Janrlari: ${data.genre}
+├‣  Kanal: ${field.channelLink || '@' + field.name}
+╰────────────────────
+          `.trim();
+
           const sentVideo = await ctx.api.sendVideo(
             dbChannel.channelId,
             video.file_id,
             {
-              caption: `🎬 ${data.title || 'Kino'}\n🆔 Kod: ${data.code}`,
+              caption: dbCaption,
             },
           );
           videoMessages.push({
