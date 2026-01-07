@@ -461,14 +461,23 @@ Savollaringiz bo'lsa murojaat qiling:
 
     const text = ctx.message.text;
 
-    // Skip if it's a command or button
-    if (text.startsWith('/') || text.includes('🎬') || text.includes('📺')) {
+    // Skip if it's a command or button text
+    if (
+      text.startsWith('/') ||
+      text.includes('🔍') ||
+      text.includes('💎') ||
+      text.includes('ℹ️') ||
+      text.includes('📞') ||
+      text.includes('🎬') ||
+      text.includes('📺')
+    ) {
       return;
     }
 
     // Try to parse as code
     const code = parseInt(text);
     if (!isNaN(code) && code > 0) {
+      this.logger.log(`User ${ctx.from?.id} searching for code: ${code}`);
       await this.handleCodeSearch(ctx, code);
     }
   }
@@ -477,22 +486,41 @@ Savollaringiz bo'lsa murojaat qiling:
   private async handleCodeSearch(ctx: BotContext, code: number) {
     if (!ctx.from) return;
 
+    this.logger.log(
+      `[handleCodeSearch] User ${ctx.from.id} searching for code: ${code}`,
+    );
+
     // Check if user exists and premium status
     const user = await this.userService.findByTelegramId(String(ctx.from.id));
-    if (!user) return;
+    if (!user) {
+      this.logger.error(`[handleCodeSearch] User not found: ${ctx.from.id}`);
+      return;
+    }
 
     const premiumStatus = await this.premiumService.checkPremiumStatus(user.id);
     const isPremium = premiumStatus.isPremium && !premiumStatus.isExpired;
 
+    this.logger.log(
+      `[handleCodeSearch] User ${ctx.from.id} premium status: ${isPremium}`,
+    );
+
     // Check subscription first if not premium
     if (!isPremium) {
       const hasSubscription = await this.checkSubscription(ctx, code, 'search');
-      if (!hasSubscription) return;
+      if (!hasSubscription) {
+        this.logger.log(
+          `[handleCodeSearch] User ${ctx.from.id} not subscribed`,
+        );
+        return;
+      }
     }
 
     // Try to find movie
     const movie = await this.movieService.findByCode(String(code));
     if (movie) {
+      this.logger.log(
+        `[handleCodeSearch] Found movie: ${movie.title} (${code})`,
+      );
       await this.sendMovieToUser(ctx, code);
       return;
     }
@@ -500,10 +528,14 @@ Savollaringiz bo'lsa murojaat qiling:
     // Try to find serial
     const serial = await this.serialService.findByCode(String(code));
     if (serial) {
+      this.logger.log(
+        `[handleCodeSearch] Found serial: ${serial.title} (${code})`,
+      );
       await this.sendSerialToUser(ctx, code);
       return;
     }
 
+    this.logger.log(`[handleCodeSearch] Movie/serial not found: ${code}`);
     await ctx.reply(`❌ ${code} kodli kino yoki serial topilmadi.`);
   }
 
@@ -511,12 +543,21 @@ Savollaringiz bo'lsa murojaat qiling:
   private async sendMovieToUser(ctx: BotContext, code: number) {
     if (!ctx.from) return;
 
+    this.logger.log(
+      `[sendMovieToUser] Sending movie ${code} to user ${ctx.from.id}`,
+    );
+
     try {
       const movie = await this.movieService.findByCode(String(code));
       if (!movie) {
+        this.logger.warn(`[sendMovieToUser] Movie ${code} not found`);
         await ctx.reply(`❌ ${code} kodli kino topilmadi.`);
         return;
       }
+
+      this.logger.log(
+        `[sendMovieToUser] Found movie: ${movie.title}, videoFileId: ${movie.videoFileId ? 'YES' : 'NO'}`,
+      );
 
       const user = await this.userService.findByTelegramId(String(ctx.from.id));
       if (!user) return;
@@ -538,11 +579,16 @@ Savollaringiz bo'lsa murojaat qiling:
       `.trim();
 
       await ctx.reply(infoMessage);
+      this.logger.log(`[sendMovieToUser] Info message sent`);
 
       if (movie.videoFileId) {
         // Parse video messages if stored as JSON
         try {
           const videoData = JSON.parse(movie.videoMessageId || '[]');
+          this.logger.log(
+            `[sendMovieToUser] Parsed video data, count: ${videoData.length}`,
+          );
+
           if (videoData.length > 0) {
             // Forward from database channel with share button
             const botUsername = (await ctx.api.getMe()).username;
@@ -553,6 +599,9 @@ Savollaringiz bo'lsa murojaat qiling:
             );
 
             for (const video of videoData) {
+              this.logger.log(
+                `[sendMovieToUser] Copying video from channel ${video.channelId}, message ${video.messageId}`,
+              );
               await ctx.api.copyMessage(
                 ctx.from.id,
                 video.channelId,
@@ -562,11 +611,19 @@ Savollaringiz bo'lsa murojaat qiling:
                   reply_markup: shareKeyboard,
                 },
               );
+              this.logger.log(`[sendMovieToUser] Video copied successfully`);
             }
           }
         } catch (error) {
+          this.logger.error(
+            `[sendMovieToUser] Error parsing JSON or sending video:`,
+            error,
+          );
           // If not JSON, send directly with share button
           if (movie.videoFileId) {
+            this.logger.log(
+              `[sendMovieToUser] Fallback: sending video directly with file_id`,
+            );
             const botUsername = (await ctx.api.getMe()).username;
             const shareLink = `https://t.me/share/url?url=https://t.me/${botUsername}?start=${movie.code}&text=🎬 ${encodeURIComponent(movie.title)}\n\n📖 Kod: ${movie.code}\n\n👇 Kinoni tomosha qilish uchun bosing:`;
             const shareKeyboard = new InlineKeyboard().url(
@@ -579,18 +636,28 @@ Savollaringiz bo'lsa murojaat qiling:
               protect_content: true,
               reply_markup: shareKeyboard,
             });
+            this.logger.log(
+              `[sendMovieToUser] Video sent successfully via fallback`,
+            );
           }
         }
 
         // Record watch history
         await this.watchHistoryService.recordMovieWatch(user.id, movie.id);
+        this.logger.log(`[sendMovieToUser] Watch history recorded`);
       } else {
+        this.logger.warn(`[sendMovieToUser] No videoFileId for movie ${code}`);
         await ctx.reply("⏳ Video hali yuklanmagan. Tez orada qo'shiladi.");
       }
 
-      this.logger.log(`User ${ctx.from.id} watched movie ${code}`);
+      this.logger.log(
+        `[sendMovieToUser] User ${ctx.from.id} watched movie ${code}`,
+      );
     } catch (error) {
-      this.logger.error(`Error sending movie ${code}:`, error);
+      this.logger.error(
+        `[sendMovieToUser] Error sending movie ${code}:`,
+        error,
+      );
       await ctx.reply(
         "❌ Kino yuklashda xatolik yuz berdi. Iltimos admin bilan bog'laning.",
       );
