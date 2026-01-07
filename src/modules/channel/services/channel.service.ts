@@ -36,7 +36,6 @@ export class ChannelService {
     return this.prisma.mandatoryChannel.findMany({
       where: { isActive: true },
       orderBy: { order: 'asc' },
-<<<<<<< HEAD
       select: {
         id: true,
         createdAt: true,
@@ -50,8 +49,6 @@ export class ChannelService {
         currentMembers: true,
         pendingRequests: true,
       },
-=======
->>>>>>> 9e7ed34722035ce8c5e304e50c0ff830bf2359f3
     });
   }
 
@@ -99,7 +96,6 @@ export class ChannelService {
     return this.prisma.mandatoryChannel.findMany({
       where: { isActive: true },
       orderBy: { order: 'asc' },
-<<<<<<< HEAD
       select: {
         id: true,
         createdAt: true,
@@ -113,8 +109,6 @@ export class ChannelService {
         currentMembers: true,
         pendingRequests: true,
       },
-=======
->>>>>>> 9e7ed34722035ce8c5e304e50c0ff830bf2359f3
     });
   }
 
@@ -145,10 +139,7 @@ export class ChannelService {
     channelLink: string;
     type: ChannelType;
     isActive?: boolean;
-<<<<<<< HEAD
     memberLimit?: number | null;
-=======
->>>>>>> 9e7ed34722035ce8c5e304e50c0ff830bf2359f3
   }) {
     return this.prisma.mandatoryChannel.create({
       data: {
@@ -157,18 +148,14 @@ export class ChannelService {
         channelLink: data.channelLink,
         type: data.type,
         isActive: data.isActive ?? true,
-<<<<<<< HEAD
         memberLimit: data.memberLimit,
         currentMembers: 0,
         pendingRequests: 0,
-=======
->>>>>>> 9e7ed34722035ce8c5e304e50c0ff830bf2359f3
         order: 0,
       },
     });
   }
 
-<<<<<<< HEAD
   async incrementMemberCount(channelId: number) {
     const channel = await this.prisma.mandatoryChannel.findUnique({
       where: { id: channelId },
@@ -215,8 +202,6 @@ export class ChannelService {
     });
   }
 
-=======
->>>>>>> 9e7ed34722035ce8c5e304e50c0ff830bf2359f3
   async deleteDatabaseChannel(id: number) {
     return this.prisma.databaseChannel.update({
       where: { id },
@@ -275,7 +260,6 @@ export class ChannelService {
 
     return newChannels > 0;
   }
-<<<<<<< HEAD
 
   // Barcha kanallarni olish (active va inactive)
   async findAllWithHistory() {
@@ -324,6 +308,4 @@ export class ChannelService {
       },
     });
   }
-=======
->>>>>>> 9e7ed34722035ce8c5e304e50c0ff830bf2359f3
 }
