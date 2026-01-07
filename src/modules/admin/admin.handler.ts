@@ -286,10 +286,12 @@ export class AdminHandler implements OnModuleInit {
       const admin = await this.getAdmin(ctx);
       const session = this.sessionService.getSession(ctx.from.id);
 
+      // ONLY handle if admin has active session
       if (admin && session) {
         await this.handleSessionText(ctx);
       } else {
-        await next(); // Let user handler process it
+        // Let next handler (user handler) process it
+        await next();
       }
     });
   }
