@@ -460,6 +460,8 @@ Savollaringiz bo'lsa murojaat qiling:
     if (!ctx.message || !('text' in ctx.message)) return;
 
     const text = ctx.message.text;
+    
+    this.logger.log(`[handleTextMessage] Received text: "${text}" from user ${ctx.from?.id}`);
 
     // Skip if it's a command or button text
     if (
@@ -471,14 +473,16 @@ Savollaringiz bo'lsa murojaat qiling:
       text.includes('🎬') ||
       text.includes('📺')
     ) {
+      this.logger.log(`[handleTextMessage] Skipping button/command text`);
       return;
     }
 
     // Try to parse as code
     const code = parseInt(text);
     if (!isNaN(code) && code > 0) {
-      this.logger.log(`User ${ctx.from?.id} searching for code: ${code}`);
+      this.logger.log(`[handleTextMessage] Parsed as code: ${code}, calling handleCodeSearch`);
       await this.handleCodeSearch(ctx, code);
+      this.logger.log(`[handleTextMessage] handleCodeSearch completed for code: ${code}`);
     }
   }
 
@@ -544,7 +548,7 @@ Savollaringiz bo'lsa murojaat qiling:
     if (!ctx.from) return;
 
     this.logger.log(
-      `[sendMovieToUser] Sending movie ${code} to user ${ctx.from.id}`,
+      `[sendMovieToUser] START - Sending movie ${code} to user ${ctx.from.id}`,
     );
 
     try {
@@ -584,17 +588,18 @@ Savollaringiz bo'lsa murojaat qiling:
         );
 
         // Send video with caption directly
-        this.logger.log(`[sendMovieToUser] Sending video with caption`);
-
+        this.logger.log(`[sendMovieToUser] About to send video...`);
+        
         await ctx.replyWithVideo(movie.videoFileId, {
           caption: caption,
           protect_content: true,
           reply_markup: shareKeyboard,
         });
+        
         this.logger.log(
           `[sendMovieToUser] Video sent successfully with caption`,
         );
-        this.logger.log(`CAPTION LENGTH = ${caption.length}`);
+        this.logger.log(`[sendMovieToUser] CAPTION LENGTH = ${caption.length}`);
 
         // Record watch history
         await this.watchHistoryService.recordMovieWatch(user.id, movie.id);
@@ -605,7 +610,7 @@ Savollaringiz bo'lsa murojaat qiling:
       }
 
       this.logger.log(
-        `[sendMovieToUser] User ${ctx.from.id} watched movie ${code}`,
+        `[sendMovieToUser] COMPLETED - User ${ctx.from.id} watched movie ${code}`,
       );
     } catch (error) {
       this.logger.error(
