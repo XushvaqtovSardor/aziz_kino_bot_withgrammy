@@ -590,47 +590,30 @@ Savollaringiz bo'lsa murojaat qiling:
       await ctx.reply(infoMessage);
 
       if (movie.videoFileId) {
-        // Parse video messages if stored as JSON
-        try {
-          const videoData = JSON.parse(movie.videoMessageId || '[]');
-          if (videoData.length > 0) {
-            // Forward from database channel with share button
-            const botUsername = (await ctx.api.getMe()).username;
-            const shareLink = `https://t.me/share/url?url=https://t.me/${botUsername}?start=${movie.code}&text=🎬 ${encodeURIComponent(movie.title)}\n\n📖 Kod: ${movie.code}\n\n👇 Kinoni tomosha qilish uchun bosing:`;
-            const shareKeyboard = new InlineKeyboard().url(
-              '📤 Share qilish',
-              shareLink,
-            );
+        const botUsername = (await ctx.api.getMe()).username;
+        const shareLink = `https://t.me/share/url?url=https://t.me/${botUsername}?start=${movie.code}&text=🎬 ${encodeURIComponent(movie.title)}\n\n📖 Kod: ${movie.code}\n\n👇 Kinoni tomosha qilish uchun bosing:`;
+        const shareKeyboard = new InlineKeyboard().url(
+          '📤 Share qilish',
+          shareLink,
+        );
 
-            for (const video of videoData) {
-              await ctx.api.copyMessage(
-                ctx.from.id,
-                video.channelId,
-                video.messageId,
-                {
-                  protect_content: true, // Disable forwarding
-                  reply_markup: shareKeyboard,
-                },
-              );
-            }
-          }
-        } catch (error) {
-          // If not JSON, send directly with share button
-          if (movie.videoFileId) {
-            const botUsername = (await ctx.api.getMe()).username;
-            const shareLink = `https://t.me/share/url?url=https://t.me/${botUsername}?start=${movie.code}&text=🎬 ${encodeURIComponent(movie.title)}\n\n📖 Kod: ${movie.code}\n\n👇 Kinoni tomosha qilish uchun bosing:`;
-            const shareKeyboard = new InlineKeyboard().url(
-              '📤 Share qilish',
-              shareLink,
-            );
+        // Video captioniga info qo‘shamiz
+        const videoCaption = `
+╭────────────────────
+├‣  Kino nomi : ${movie.title}
+├‣  Kino kodi: ${movie.code}
+├‣  Qism: 1
+├‣  Janrlari: ${movie.genre || "Noma'lum"}
+├‣  Kanal: ${field?.channelLink || '@' + (field?.name || 'Kanal')}
+╰────────────────────
+▶️ Kinoning to'liq qismini https://t.me/${botUsername}?start=${movie.code} dan tomosha qilishingiz mumkin!
+  `.trim();
 
-            await ctx.replyWithVideo(movie.videoFileId, {
-              caption: `🎬 ${movie.title}`,
-              protect_content: true,
-              reply_markup: shareKeyboard,
-            });
-          }
-        }
+        await ctx.replyWithVideo(movie.videoFileId, {
+          caption: videoCaption,
+          protect_content: true,
+          reply_markup: shareKeyboard,
+        });
 
         // Record watch history
         await this.watchHistoryService.recordMovieWatch(user.id, movie.id);
