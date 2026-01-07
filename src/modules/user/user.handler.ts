@@ -854,7 +854,7 @@ ${serial.genre ? `ğŸ­ Janr: ${serial.genre}\n` : ''}${serial.description ? `\nğ
 
       await ctx.editMessageText(message, {
         reply_markup: keyboard,
-      });  
+      });
     }
   }
 
