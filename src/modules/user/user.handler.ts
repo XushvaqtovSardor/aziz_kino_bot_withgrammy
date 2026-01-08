@@ -87,6 +87,7 @@ export class UserHandler implements OnModuleInit {
     bot.use(async (ctx, next) => {
       if (ctx.message && 'text' in ctx.message) {
         await this.handleTextMessage(ctx);
+        return;
       } else {
         await next();
       }
@@ -596,6 +597,7 @@ Savollaringiz bo'lsa murojaat qiling:
           '📤 Share qilish',
           shareLink,
         );
+this.logger.warn(`sendMovieToUser CALLED for ${code}`);
 
         // Video captioniga info qo‘shamiz
         const videoCaption = `
@@ -610,7 +612,7 @@ Savollaringiz bo'lsa murojaat qiling:
   `.trim();
 
         await ctx.replyWithVideo(movie.videoFileId, {
-          caption: infoMessage,
+          caption: videoCaption,
           protect_content: true,
           reply_markup: shareKeyboard,
         });
