@@ -447,7 +447,7 @@ To'lov qilgandan keyin chekni botga yuboring.
     await ctx.reply("⚙️ Sozlamalar bo'limi ishlab chiqilmoqda...");
   }
 
-  d; // ==================== CONTACT ====================
+d  // ==================== CONTACT ====================
   private async showContact(ctx: BotContext) {
     const settings = await this.settingsService.getSettings();
 
@@ -585,12 +585,19 @@ Savollaringiz bo'lsa murojaat qiling:
           .row()
           .url('📤 Share qilish', shareLink);
 
-        // Video captioniga info qo'shamiz
-        const videoCaption = `��� ${movie.title}
+        this.logger.warn(`sendMovieToUser CALLED for ${code}`);
 
-��� Kod: ${movie.code}
-��� Janr: ${movie.genre || "Noma'lum"}
-��� Kanal: ${field?.channelLink || '@' + (field?.name || 'Kanal')}`;
+        // Video captioniga info qo‘shamiz
+      const videoCaption = `
+╭────────────────────
+├‣  Kino nomi : ${movie.title}
+├‣  Kino kodi: ${movie.code}
+├‣  Qism: 1
+├‣  Janrlari: ${movie.genre || "Noma'lum"}
+├‣  Kanal: ${field?.channelLink || '@' + (field?.name || 'Kanal')}
+╰────────────────────
+▶️ Kinoning to'liq qismini https://t.me/${botUsername} dan tomosha qilishingiz mumkin!
+  `.trim();
 
         await ctx.replyWithVideo(movie.videoFileId, {
           caption: videoCaption,
