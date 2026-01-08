@@ -41,6 +41,15 @@ export class MovieService {
     });
   }
 
+  async findById(id: number) {
+    return this.prisma.movie.findUnique({
+      where: { id },
+      include: {
+        field: true,
+      },
+    });
+  }
+
   async isCodeAvailable(code: number): Promise<boolean> {
     return this.codeGenerator.isCodeAvailable(String(code));
   }

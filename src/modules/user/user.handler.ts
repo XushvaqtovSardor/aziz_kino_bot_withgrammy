@@ -665,50 +665,6 @@ ${movie.genre ? `🎭 Janr: ${movie.genre}\n` : ''}${movie.description ? `\n📝
     }
   }
 
-  // ==================== SEND SERIAL ====================
-        const movieDeepLink = `https://t.me/${botUsername}?start=${movie.code}`;
-        const shareKeyboard = new InlineKeyboard()
-          .url(`🎬 Kino kodi: ${movie.code}`, movieDeepLink)
-          .row()
-          .url('📤 Share qilish', shareLink);
-
-        this.logger.warn(`sendMovieToUser CALLED for ${code}`);
-
-        // Video captioniga info qo‘shamiz
-        const videoCaption = `
-╭────────────────────
-├‣  Kino nomi : ${movie.title}
-├‣  Kino kodi: ${movie.code}
-├‣  Qism: 1
-├‣  Janrlari: ${movie.genre || "Noma'lum"}
-├‣  Kanal: ${field?.channelLink || '@' + (field?.name || 'Kanal')}
-╰────────────────────
-▶️ Kinoning to'liq qismini https://t.me/${botUsername} dan tomosha qilishingiz mumkin!
-  `.trim();
-
-        await ctx.replyWithVideo(movie.videoFileId, {
-          caption: videoCaption,
-          protect_content: true,
-          reply_markup: shareKeyboard,
-        });
-
-        // Record watch history
-        await this.watchHistoryService.recordMovieWatch(user.id, movie.id);
-      } else {
-        await ctx.reply("⏳ Video hali yuklanmagan. Tez orada qo'shiladi.");
-      }
-
-      this.logger.log(`User ${ctx.from.id} watched movie ${code}`);
-    } catch (error) {
-      this.logger.error(`Error sending movie ${code}:`, error);
-      this.logger.error(`Error stack:`, error.stack);
-      await ctx.reply(
-        "❌ Kino yuklashda xatolik yuz berdi. Iltimos admin bilan bog'laning.",
-      );
-    }
-  }
-
-  // ==================== SEND SERIAL ====================
   private async sendSerialToUser(ctx: BotContext, code: number) {
     if (!ctx.from) return;
 

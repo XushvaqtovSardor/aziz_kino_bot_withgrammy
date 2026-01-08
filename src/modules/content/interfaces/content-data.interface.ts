@@ -14,6 +14,7 @@ export interface MovieData {
   imdb?: number;
   duration?: number;
   fieldId: number;
+  totalEpisodes?: number;
 }
 
 export interface SerialData {
