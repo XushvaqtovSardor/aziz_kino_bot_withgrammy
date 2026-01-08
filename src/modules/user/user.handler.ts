@@ -587,7 +587,7 @@ Savollaringiz bo'lsa murojaat qiling:
 ▶️ Kinoning to'liq qismini https://t.me/${botUsername}?start=${movie.code} dan tomosha qilishingiz mumkin!
       `.trim();
 
-      await ctx.reply(infoMessage);
+      // await ctx.reply(infoMessage);
 
       if (movie.videoFileId) {
         const botUsername = (await ctx.api.getMe()).username;
@@ -610,7 +610,7 @@ Savollaringiz bo'lsa murojaat qiling:
   `.trim();
 
         await ctx.replyWithVideo(movie.videoFileId, {
-          caption: videoCaption,
+          caption: infoMessage,
           protect_content: true,
           reply_markup: shareKeyboard,
         });
