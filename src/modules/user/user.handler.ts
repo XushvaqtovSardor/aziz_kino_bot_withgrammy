@@ -576,7 +576,7 @@ Savollaringiz bo'lsa murojaat qiling:
       if (movie.videoFileId) {
         const botUsername = (await ctx.api.getMe()).username;
         const field = await this.fieldService.findOne(movie.fieldId);
-        const shareLink = `https://t.me/share/url?url=https://t.me/${botUsername}?start=${movie.code}&text=🎬 ${encodeURIComponent(movie.title)}\n\n📖 Kod: ${movie.code}\n\n👇 Kinoni tomosha qilish uchun bosing:`;
+        const shareLink = ` ${encodeURIComponent(movie.title)}\n\n📖 Kod: ${movie.code}\n\n👇 Kinoni tomosha qilish uchun bosing:\nhttps://t.me/share/url?url=https://t.me/${botUsername}?start=${movie.code}&text=🎬`;
 
         // Create keyboard with movie code button and share button
         const movieDeepLink = `https://t.me/${botUsername}?start=${movie.code}`;
