@@ -399,6 +399,7 @@ export class SerialManagementService {
         nextEpisodeNumber,
         addedEpisodes: [],
       });
+      this.sessionService.setStep(ctx.from.id, 7); // Step for adding episodes
 
       await ctx.reply(
         `🎬 Kino topildi!\n\n` +
@@ -418,6 +419,7 @@ export class SerialManagementService {
         nextEpisodeNumber,
         addedEpisodes: [],
       });
+      this.sessionService.setStep(ctx.from.id, 7); // Step for adding episodes
 
       await ctx.reply(
         `📺 Serial topildi!\n\n` +
