@@ -152,17 +152,36 @@ model Movie {
   imdb              Float?
   duration          Int?
   fieldId           Int
+  totalEpisodes     Int            @default(1)
   views             Int            @default(0)
   shareLink         String?
   createdAt         DateTime       @default(now())
   updatedAt         DateTime       @updatedAt
   
   field         Field          @relation(fields: [fieldId], references: [id])
+  episodes      MovieEpisode[]
   watchHistory  WatchHistory[]
   
   @@index([code])
   @@index([fieldId])
   @@index([views])
+}
+
+model MovieEpisode {
+  id              Int      @id @default(autoincrement())
+  movieId         Int
+  episodeNumber   Int
+  title           String?
+  description     String?  @db.Text
+  videoFileId     String
+  videoMessageId  String
+  views           Int      @default(0)
+  createdAt       DateTime @default(now())
+  
+  movie           Movie    @relation(fields: [movieId], references: [id], onDelete: Cascade)
+  
+  @@unique([movieId, episodeNumber])
+  @@index([movieId])
 }
 model Serial {
   id                  Int            @id @default(autoincrement())

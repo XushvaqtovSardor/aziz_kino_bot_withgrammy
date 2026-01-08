@@ -5,6 +5,7 @@ import { UserService } from './services/user.service';
 import { MovieService } from '../content/services/movie.service';
 import { SerialService } from '../content/services/serial.service';
 import { EpisodeService } from '../content/services/episode.service';
+import { MovieEpisodeService } from '../content/services/movie-episode.service';
 import { ChannelService } from '../channel/services/channel.service';
 import { PremiumService } from '../payment/services/premium.service';
 import { WatchHistoryService } from '../content/services/watch-history.service';
@@ -23,6 +24,7 @@ export class UserHandler implements OnModuleInit {
     private movieService: MovieService,
     private serialService: SerialService,
     private episodeService: EpisodeService,
+    private movieEpisodeService: MovieEpisodeService,
     private channelService: ChannelService,
     private premiumService: PremiumService,
     private watchHistoryService: WatchHistoryService,
@@ -55,6 +57,10 @@ export class UserHandler implements OnModuleInit {
     bot.callbackQuery(
       /^episode_(\d+)_(\d+)$/,
       this.handleEpisodeCallback.bind(this),
+    );
+    bot.callbackQuery(
+      /^movie_episode_(\d+)_(\d+)$/,
+      this.handleMovieEpisodeCallback.bind(this),
     );
     bot.callbackQuery(
       /^field_channel_(\d+)$/,
@@ -572,13 +578,94 @@ Savollaringiz bo'lsa murojaat qiling:
       const user = await this.userService.findByTelegramId(String(ctx.from.id));
       if (!user) return;
 
-      // Send video directly without poster
-      if (movie.videoFileId) {
-        const botUsername = (await ctx.api.getMe()).username;
-        const field = await this.fieldService.findOne(movie.fieldId);
-        const shareLink = `https://t.me/share/url?url=https://t.me/${botUsername}?start=${movie.code}&text=🎬 ${encodeURIComponent(movie.title)}\n\n📖 Kod: ${movie.code}\n\n👆 Kinoni tomosha qilish uchun bosing:`;
+      // Get movie episodes
+      const episodes = await this.movieEpisodeService.findByMovieId(movie.id);
 
-        // Create keyboard with movie code button and share button
+      const botUsername = (await ctx.api.getMe()).username;
+      const field = await this.fieldService.findOne(movie.fieldId);
+
+      // If movie has multiple episodes, show episode selection like serials
+      if (episodes.length > 1) {
+        const movieDeepLink = `https://t.me/${botUsername}?start=${movie.code}`;
+
+        const caption = `
+🎬 **${movie.title}**
+${movie.genre ? `🎭 Janr: ${movie.genre}\n` : ''}${movie.description ? `\n📝 ${movie.description}\n` : ''}
+📊 Jami qismlar: ${episodes.length}
+🆔 Kod: ${movie.code}
+        `.trim();
+
+        // Create keyboard with episode numbers
+        const keyboard = new InlineKeyboard();
+        episodes.forEach((episode, index) => {
+          keyboard.text(
+            `${episode.episodeNumber}`,
+            `movie_episode_${movie.id}_${episode.episodeNumber}`,
+          );
+          if ((index + 1) % 5 === 0) keyboard.row();
+        });
+        if (episodes.length % 5 !== 0) keyboard.row();
+
+        const shareLink = `https://t.me/share/url?url=${movieDeepLink}&text=🎬 ${encodeURIComponent(movie.title)}%0A%0A📊Parts: ${episodes.length}%0A📝 Kod: ${movie.code}%0A%0A👆 Kinoni tomosha qilish uchun bosing:`;
+        keyboard.url('📤 Share qilish', shareLink);
+
+        // Send poster with episodes
+        await ctx.replyWithPhoto(movie.posterFileId, {
+          caption,
+          parse_mode: 'Markdown',
+          reply_markup: keyboard,
+        });
+
+        // Record watch history
+        await this.watchHistoryService.recordMovieWatch(user.id, movie.id);
+      } else {
+        // Single episode movie - send video directly
+        if (movie.videoFileId) {
+          const shareLink = `https://t.me/share/url?url=https://t.me/${botUsername}?start=${movie.code}&text=🎬 ${encodeURIComponent(movie.title)}%0A%0A📝 Kod: ${movie.code}%0A%0A👆 Kinoni tomosha qilish uchun bosing:`;
+
+          const movieDeepLink = `https://t.me/${botUsername}?start=${movie.code}`;
+          const shareKeyboard = new InlineKeyboard()
+            .url(`🎬 Kino kodi: ${movie.code}`, movieDeepLink)
+            .row()
+            .url('📤 Share qilish', shareLink);
+
+          this.logger.warn(`sendMovieToUser CALLED for ${code}`);
+
+          const videoCaption = `
+╭────────────────────
+├‣  Kino nomi : ${movie.title}
+├‣  Kino kodi: ${movie.code}
+├‣  Qism: 1
+├‣  Janrlari: ${movie.genre || "Noma'lum"}
+├‣  Kanal: ${field?.channelLink || '@' + (field?.name || 'Kanal')}
+╰────────────────────
+▶️ Kinoning to'liq qismini https://t.me/${botUsername} dan tomosha qilishingiz mumkin!
+          `.trim();
+
+          await ctx.replyWithVideo(movie.videoFileId, {
+            caption: videoCaption,
+            protect_content: true,
+            reply_markup: shareKeyboard,
+          });
+
+          // Record watch history
+          await this.watchHistoryService.recordMovieWatch(user.id, movie.id);
+        } else {
+          await ctx.reply("⏳ Video hali yuklanmagan. Tez orada qo'shiladi.");
+        }
+      }
+
+      this.logger.log(`User ${ctx.from.id} watched movie ${code}`);
+    } catch (error) {
+      this.logger.error(`Error sending movie ${code}:`, error);
+      this.logger.error(`Error stack:`, error.stack);
+      await ctx.reply(
+        "❌ Kino yuklashda xatolik yuz berdi. Iltimos admin bilan bog'laning.",
+      );
+    }
+  }
+
+  // ==================== SEND SERIAL ====================
         const movieDeepLink = `https://t.me/${botUsername}?start=${movie.code}`;
         const shareKeyboard = new InlineKeyboard()
           .url(`🎬 Kino kodi: ${movie.code}`, movieDeepLink)
@@ -1017,6 +1104,77 @@ ${serial.genre ? `🎭 Janr: ${serial.genre}\n` : ''}${serial.description ? `\n�
       );
     } catch (error) {
       this.logger.error('Error handling episode callback:', error);
+      await ctx.reply('❌ Qism yuklashda xatolik yuz berdi.');
+    }
+  }
+
+  private async handleMovieEpisodeCallback(ctx: BotContext) {
+    if (!ctx.callbackQuery || !('data' in ctx.callbackQuery) || !ctx.from)
+      return;
+
+    const match = ctx.callbackQuery.data.match(/^movie_episode_(\d+)_(\d+)$/);
+    if (!match) return;
+
+    const movieId = parseInt(match[1]);
+    const episodeNumber = parseInt(match[2]);
+
+    await ctx.answerCallbackQuery({
+      text: `${episodeNumber}-qism yuklanmoqda...`,
+    });
+
+    try {
+      const episode = await this.movieEpisodeService.findByMovieIdAndNumber(
+        movieId,
+        episodeNumber,
+      );
+      if (!episode) {
+        await ctx.reply('❌ Qism topilmadi.');
+        return;
+      }
+
+      // Send episode video with share button
+      const movie = await this.movieService.findById(movieId);
+      const botUsername = (await ctx.api.getMe()).username;
+      const shareLink = `https://t.me/share/url?url=https://t.me/${botUsername}?start=${movie.code}&text=🎬 ${encodeURIComponent(movie.title)}\n\n📊 Qismlar: ${movie.totalEpisodes}\n📖 Kod: ${movie.code}\n\n👇 Kinoni tomosha qilish uchun bosing:`;
+      const movieDeepLink = `https://t.me/${botUsername}?start=${movie.code}`;
+
+      const shareKeyboard = new InlineKeyboard()
+        .url(`🎬 Kino kodi: ${movie.code}`, movieDeepLink)
+        .row()
+        .url('📤 Share qilish', shareLink);
+
+      if (episode.videoFileId) {
+        await ctx.replyWithVideo(episode.videoFileId, {
+          caption: `🎬 ${episode.title || `Qism ${episode.episodeNumber}`}`,
+          protect_content: true,
+          reply_markup: shareKeyboard,
+        });
+      } else if (episode.videoMessageId) {
+        // Try to copy from channel
+        try {
+          const videoData = JSON.parse(episode.videoMessageId);
+          if (Array.isArray(videoData) && videoData.length > 0) {
+            await ctx.api.copyMessage(
+              ctx.from.id,
+              videoData[0].channelId,
+              videoData[0].messageId,
+              {
+                protect_content: true,
+                reply_markup: shareKeyboard,
+              },
+            );
+          }
+        } catch (error) {
+          this.logger.error('Error copying movie episode video:', error);
+          await ctx.reply('❌ Video yuklashda xatolik.');
+        }
+      }
+
+      this.logger.log(
+        `User ${ctx.from.id} watched episode ${episodeNumber} of movie ${movieId}`,
+      );
+    } catch (error) {
+      this.logger.error('Error handling movie episode callback:', error);
       await ctx.reply('❌ Qism yuklashda xatolik yuz berdi.');
     }
   }

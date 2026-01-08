@@ -4,6 +4,7 @@ import { InlineKeyboard, Keyboard } from 'grammy';
 import { SerialService } from '../../content/services/serial.service';
 import { MovieService } from '../../content/services/movie.service';
 import { EpisodeService } from '../../content/services/episode.service';
+import { MovieEpisodeService } from '../../content/services/movie-episode.service';
 import { FieldService } from '../../field/services/field.service';
 import { ChannelService } from '../../channel/services/channel.service';
 import { SessionService } from './session.service';
@@ -29,6 +30,7 @@ export class SerialManagementService {
     private serialService: SerialService,
     private movieService: MovieService,
     private episodeService: EpisodeService,
+    private movieEpisodeService: MovieEpisodeService,
     private fieldService: FieldService,
     private channelService: ChannelService,
     private sessionService: SessionService,
@@ -363,56 +365,71 @@ export class SerialManagementService {
     }
   }
 
-  // ========== ADDING EPISODE TO EXISTING SERIAL ==========
+  // ========== ADDING EPISODE TO EXISTING MOVIE/SERIAL ==========
   async handleAddEpisodeCode(ctx: BotContext, code: number) {
     if (!ctx.from) return;
 
-    // Check if code is used by a movie
-    const existingMovie = await this.movieService.findByCode(code.toString());
-    if (existingMovie) {
-      await ctx.reply(
-        `❌ ${code} kodi kino uchun ishlatilgan!\n\n🎬 ${existingMovie.title}\n\n⚠️ Serial uchun boshqa kod tanlang:`,
-        AdminKeyboard.getCancelButton(),
-      );
-      return;
-    }
-
+    // Check if code exists in movies or serials
+    const movie = await this.movieService.findByCode(code.toString());
     const serial = await this.serialService.findByCode(code.toString());
-    if (!serial) {
+
+    if (!movie && !serial) {
       await ctx.reply(
-        '❌ Bu kod bilan serial topilmadi!\nBoshqa kod kiriting:',
+        '❌ Bu kod bilan kino yoki serial topilmadi!\nBoshqa kod kiriting:',
         AdminKeyboard.getCancelButton(),
       );
       return;
     }
 
-    // Get current episodes count
-    const episodes = await this.episodeService.findBySerialId(serial.id);
-    const nextEpisodeNumber = episodes.length + 1;
+    if (movie) {
+      // Handle movie episodes
+      const episodes = await this.movieEpisodeService.findByMovieId(movie.id);
+      const nextEpisodeNumber = episodes.length + 1;
 
-    this.sessionService.updateSessionData(ctx.from.id, {
-      serial,
-      nextEpisodeNumber,
-      addedEpisodes: [],
-    });
+      this.sessionService.updateSessionData(ctx.from.id, {
+        contentType: 'movie',
+        movie,
+        nextEpisodeNumber,
+        addedEpisodes: [],
+      });
 
-    await ctx.reply(
-      `📺 Serial topildi!\n\n` +
-        `🏷 ${serial.title}\n` +
-        `📹 Mavjud qismlar: ${episodes.length}\n\n` +
-        `📹 ${nextEpisodeNumber}-qism videosini yuboring:`,
-      AdminKeyboard.getCancelButton(),
-    );
+      await ctx.reply(
+        `🎬 Kino topildi!\n\n` +
+          `🏷 ${movie.title}\n` +
+          `📹 Mavjud qismlar: ${episodes.length}\n\n` +
+          `📹 ${nextEpisodeNumber}-qism videosini yuboring:`,
+        AdminKeyboard.getCancelButton(),
+      );
+    } else if (serial) {
+      // Handle serial episodes
+      const episodes = await this.episodeService.findBySerialId(serial.id);
+      const nextEpisodeNumber = episodes.length + 1;
+
+      this.sessionService.updateSessionData(ctx.from.id, {
+        contentType: 'serial',
+        serial,
+        nextEpisodeNumber,
+        addedEpisodes: [],
+      });
+
+      await ctx.reply(
+        `📺 Serial topildi!\n\n` +
+          `🏷 ${serial.title}\n` +
+          `📹 Mavjud qismlar: ${episodes.length}\n\n` +
+          `📹 ${nextEpisodeNumber}-qism videosini yuboring:`,
+        AdminKeyboard.getCancelButton(),
+      );
+    }
   }
 
-  async handleExistingSerialEpisodeVideo(
+  async handleExistingContentEpisodeVideo(
     ctx: BotContext,
     videoFileId: string,
     session: any,
   ) {
     if (!ctx.from) return;
 
-    const { serial, nextEpisodeNumber, addedEpisodes } = session.data;
+    const { nextEpisodeNumber, addedEpisodes } = session.data;
 
     // Save episode temporarily
     addedEpisodes.push({
@@ -445,7 +462,7 @@ export class SerialManagementService {
     const session = this.sessionService.getSession(ctx.from.id);
     if (!session) return;
 
-    const { serial, addedEpisodes } = session.data;
+    const { contentType, movie, serial, addedEpisodes } = session.data;
 
     try {
       await ctx.reply('⏳ Qismlar yuklanmoqda...');
@@ -453,47 +470,129 @@ export class SerialManagementService {
       // Get database channels
       const dbChannels = await this.channelService.findAllDatabase();
 
-      // Upload episodes
-      for (const ep of addedEpisodes) {
-        const videoMessages = [];
-        for (const dbChannel of dbChannels) {
-          try {
-            const sentVideo = await ctx.api.sendVideo(
-              dbChannel.channelId,
-              ep.videoFileId,
-              {
-                caption: `📺 ${serial.title}\n📹 ${ep.episodeNumber}-qism\n🆔 Kod: ${serial.code}`,
-              },
-            );
-            videoMessages.push({
-              channelId: dbChannel.channelId,
-              messageId: sentVideo.message_id,
-            });
-          } catch (error) {
-            this.logger.error('Error uploading episode:', error);
+      if (contentType === 'movie') {
+        // Upload movie episodes
+        for (const ep of addedEpisodes) {
+          const videoMessages = [];
+          for (const dbChannel of dbChannels) {
+            try {
+              const sentVideo = await ctx.api.sendVideo(
+                dbChannel.channelId,
+                ep.videoFileId,
+                {
+                  caption: `🎬 ${movie.title}\n📹 ${ep.episodeNumber}-qism\n🆔 Kod: ${movie.code}`,
+                },
+              );
+              videoMessages.push({
+                channelId: dbChannel.channelId,
+                messageId: sentVideo.message_id,
+              });
+            } catch (error) {
+              this.logger.error('Error uploading movie episode:', error);
+            }
           }
+
+          // Save movie episode to database
+          await this.movieEpisodeService.create({
+            movieId: movie.id,
+            episodeNumber: ep.episodeNumber,
+            videoFileId: ep.videoFileId,
+            videoMessageId: JSON.stringify(videoMessages),
+          });
         }
 
-        // Save episode to database
-        await this.episodeService.create({
-          serialId: serial.id,
-          episodeNumber: ep.episodeNumber,
-          videoFileId: ep.videoFileId,
-          videoMessageId: JSON.stringify(videoMessages),
+        // Update movie total episodes
+        const allEpisodes = await this.movieEpisodeService.findByMovieId(
+          movie.id,
+        );
+        await this.movieService.update(movie.id, {
+          totalEpisodes: allEpisodes.length,
+        });
+      } else {
+        // Upload serial episodes
+        for (const ep of addedEpisodes) {
+          const videoMessages = [];
+          for (const dbChannel of dbChannels) {
+            try {
+              const sentVideo = await ctx.api.sendVideo(
+                dbChannel.channelId,
+                ep.videoFileId,
+                {
+                  caption: `📺 ${serial.title}\n📹 ${ep.episodeNumber}-qism\n🆔 Kod: ${serial.code}`,
+                },
+              );
+              videoMessages.push({
+                channelId: dbChannel.channelId,
+                messageId: sentVideo.message_id,
+              });
+            } catch (error) {
+              this.logger.error('Error uploading episode:', error);
+            }
+          }
+
+          // Save episode to database
+          await this.episodeService.create({
+            serialId: serial.id,
+            episodeNumber: ep.episodeNumber,
+            videoFileId: ep.videoFileId,
+            videoMessageId: JSON.stringify(videoMessages),
+          });
+        }
+
+        // Update serial total episodes
+        const allEpisodes = await this.episodeService.findBySerialId(serial.id);
+        await this.serialService.update(serial.id, {
+          totalEpisodes: allEpisodes.length,
         });
       }
 
-      // Update serial total episodes
-      const allEpisodes = await this.episodeService.findBySerialId(serial.id);
-      await this.serialService.update(serial.id, {
-        totalEpisodes: allEpisodes.length,
-      });
-
       // Update field channel poster if requested
-      if (updateField && serial.channelMessageId) {
-        const field = await this.fieldService.findOne(serial.fieldId);
-        if (field) {
-          const caption = `
+      if (updateField) {
+        if (contentType === 'movie' && movie.channelMessageId) {
+          const field = await this.fieldService.findOne(movie.fieldId);
+          if (field) {
+            const allEpisodes = await this.movieEpisodeService.findByMovieId(
+              movie.id,
+            );
+            const caption = `
+╭────────────────────
+├‣  Kino nomi : ${movie.title}
+├‣  Kino kodi: ${movie.code}
+├‣  Qismlar: ${allEpisodes.length}
+├‣  Janrlari: ${movie.genre}
+├‣  Kanal: ${field.channelLink || '@' + field.name}
+╰────────────────────
+▶️ Kinoning to'liq qismlarini https://t.me/${this.grammyBot.botUsername}?start=${movie.code} dan tomosha qilishingiz mumkin!
+            `.trim();
+
+            const keyboard = new InlineKeyboard().url(
+              '✨ Tomosha Qilish',
+              `https://t.me/${this.grammyBot.botUsername}?start=${movie.code}`,
+            );
+
+            try {
+              await ctx.api.editMessageCaption(
+                field.channelId,
+                movie.channelMessageId,
+                {
+                  caption,
+                  reply_markup: keyboard,
+                },
+              );
+            } catch (error) {
+              this.logger.error(
+                'Error updating movie field channel poster:',
+                error,
+              );
+            }
+          }
+        } else if (contentType === 'serial' && serial.channelMessageId) {
+          const field = await this.fieldService.findOne(serial.fieldId);
+          if (field) {
+            const allEpisodes = await this.episodeService.findBySerialId(
+              serial.id,
+            );
+            const caption = `
 ╭────────────────────
 ├‣  Serial nomi : ${serial.title}
 ├‣  Serial kodi: ${serial.code}
@@ -502,37 +601,55 @@ export class SerialManagementService {
 ├‣  Kanal: ${field.channelLink || '@' + field.name}
 ╰────────────────────
 ▶️ Serialning to'liq qismlarini https://t.me/${this.grammyBot.botUsername}?start=s${serial.code} dan tomosha qilishingiz mumkin!
-          `.trim();
+            `.trim();
 
-          const keyboard = new InlineKeyboard().url(
-            '✨ Tomosha Qilish',
-            `https://t.me/${this.grammyBot.botUsername}?start=s${serial.code}`,
-          );
-
-          try {
-            await ctx.api.editMessageCaption(
-              field.channelId,
-              serial.channelMessageId,
-              {
-                caption,
-                reply_markup: keyboard,
-              },
+            const keyboard = new InlineKeyboard().url(
+              '✨ Tomosha Qilish',
+              `https://t.me/${this.grammyBot.botUsername}?start=s${serial.code}`,
             );
-          } catch (error) {
-            this.logger.error('Error updating field channel poster:', error);
+
+            try {
+              await ctx.api.editMessageCaption(
+                field.channelId,
+                serial.channelMessageId,
+                {
+                  caption,
+                  reply_markup: keyboard,
+                },
+              );
+            } catch (error) {
+              this.logger.error(
+                'Error updating serial field channel poster:',
+                error,
+              );
+            }
           }
         }
       }
 
       this.sessionService.clearSession(ctx.from.id);
 
-      await ctx.reply(
-        `✅ Qismlar muvaffaqiyatli qo'shildi!\n\n` +
-          `📺 ${serial.title}\n` +
-          `📹 Jami qismlar: ${allEpisodes.length}\n` +
-          `➕ Qo'shildi: ${addedEpisodes.length} ta`,
-        AdminKeyboard.getAdminMainMenu('ADMIN'),
-      );
+      if (contentType === 'movie') {
+        const allEpisodes = await this.movieEpisodeService.findByMovieId(
+          movie.id,
+        );
+        await ctx.reply(
+          `✅ Qismlar muvaffaqiyatli qo'shildi!\n\n` +
+            `🎬 ${movie.title}\n` +
+            `📹 Jami qismlar: ${allEpisodes.length}\n` +
+            `➕ Qo'shildi: ${addedEpisodes.length} ta`,
+          AdminKeyboard.getAdminMainMenu('ADMIN'),
+        );
+      } else {
+        const allEpisodes = await this.episodeService.findBySerialId(serial.id);
+        await ctx.reply(
+          `✅ Qismlar muvaffaqiyatli qo'shildi!\n\n` +
+            `📺 ${serial.title}\n` +
+            `📹 Jami qismlar: ${allEpisodes.length}\n` +
+            `➕ Qo'shildi: ${addedEpisodes.length} ta`,
+          AdminKeyboard.getAdminMainMenu('ADMIN'),
+        );
+      }
     } catch (error) {
       this.logger.error('Error finalizing episodes:', error);
       await ctx.reply(`❌ Xatolik: ${error.message}`);

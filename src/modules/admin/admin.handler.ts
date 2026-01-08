@@ -489,8 +489,8 @@ export class AdminHandler implements OnModuleInit {
 
     // Check if adding episodes to existing serial
     if (session.state === AdminState.CREATING_SERIAL && session.step === 7) {
-      // step 7 = ADDING_EPISODES (existing serial)
-      await this.serialManagementService.handleExistingSerialEpisodeVideo(
+      // step 7 = ADDING_EPISODES (existing serial or movie)
+      await this.serialManagementService.handleExistingContentEpisodeVideo(
         ctx,
         ctx.message.video.file_id,
         session,
