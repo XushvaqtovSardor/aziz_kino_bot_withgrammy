@@ -919,7 +919,7 @@ ${serial.genre ? `🎭 Janr: ${serial.genre}\n` : ''}${serial.description ? `\n�
 
       if (hasPending) {
         await ctx.reply(
-          "⏳ So'rovingiz qabul qilindi!\n\n📝 Private kanallarga kirish uchun admin tasdig'ini kutmoqdasiz.\n\n🎬 Shu vaqt ichida botdan foydalanishingiz mumkin.\n\n🔍 Kino yoki serial kodini yuboring.",
+          "⏳ So'rovingiz qabul qilindi!\n\n🔍 Kino yoki serial kodini yuboring.",
           { reply_markup: { remove_keyboard: true } },
         );
       } else {
