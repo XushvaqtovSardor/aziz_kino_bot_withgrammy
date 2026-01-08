@@ -367,6 +367,16 @@ export class SerialManagementService {
   async handleAddEpisodeCode(ctx: BotContext, code: number) {
     if (!ctx.from) return;
 
+    // Check if code is used by a movie
+    const existingMovie = await this.movieService.findByCode(code.toString());
+    if (existingMovie) {
+      await ctx.reply(
+        `❌ ${code} kodi kino uchun ishlatilgan!\n\n🎬 ${existingMovie.title}\n\n⚠️ Serial uchun boshqa kod tanlang:`,
+        AdminKeyboard.getCancelButton(),
+      );
+      return;
+    }
+
     const serial = await this.serialService.findByCode(code.toString());
     if (!serial) {
       await ctx.reply(
