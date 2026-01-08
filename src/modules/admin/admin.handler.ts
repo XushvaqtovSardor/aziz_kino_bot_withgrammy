@@ -2555,11 +2555,23 @@ Qaysi rol berasiz?
           code.toString(),
         );
 
+        // If adding episodes to existing content and code belongs to movie
+        if (existingMovie && session.data?.isAddingEpisode) {
+          await this.serialManagementService.handleAddEpisodeCode(ctx, code);
+          return;
+        }
+
         if (existingMovie) {
           await ctx.reply(
-            `❌ ${code} kodi kino uchun ishlatilgan!\n\n🎬 ${existingMovie.title}\n\n⚠️ Boshqa kod tanlang:`,
+            `❌ ${code} kodi kino uchun ishlatilgan!\n\n🎬 ${existingMovie.title}\n\n⚠️ Serial uchun boshqa kod tanlang:`,
             AdminKeyboard.getCancelButton(),
           );
+          return;
+        }
+
+        // If adding episodes to existing content and code belongs to serial
+        if (existingSerial && session.data?.isAddingEpisode) {
+          await this.serialManagementService.handleAddEpisodeCode(ctx, code);
           return;
         }
 
