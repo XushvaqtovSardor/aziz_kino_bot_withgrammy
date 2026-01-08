@@ -889,44 +889,60 @@ ${serial.genre ? `🎭 Janr: ${serial.genre}\n` : ''}${serial.description ? `\n�
     const unsubscribed = channelStatuses.filter((cs) => !cs.subscribed);
 
     if (unsubscribed.length === 0) {
+      // All channels subscribed - delete old message and send success
       try {
-        // Delete the old message
-        await ctx.deleteMessage();
+        if (ctx.callbackQuery?.message) {
+          await ctx.api.deleteMessage(
+            ctx.callbackQuery.message.chat.id,
+            ctx.callbackQuery.message.message_id,
+          );
+        }
       } catch (error) {
-        this.logger.warn('Could not delete message:', error);
+        this.logger.warn('Could not delete subscription message:', error);
       }
 
       // Send new success message
       await ctx.reply(
-        "✅ Siz barcha kanallarga obuna bo'lgansiz!\n\nEndi botdan foydalanishingiz mumkin. Kino kodini yuboring.",
+        "✅ Siz barcha kanallarga a'zo bo'ldingiz!\n\n🎬 Endi botdan foydalanishingiz mumkin.\n\n🔍 Kino yoki serial kodini yuboring.",
+        { reply_markup: { remove_keyboard: true } },
       );
     } else {
-      // Show detailed status
-      let message = "❌ Quyidagi kanallarga hali obuna bo'lmagansiniz:\n\n";
+      // Still have unsubscribed channels - update message
+      let message = "❌ Quyidagi kanallarga hali a'zo bo'lmagansiniz:\n\n";
 
       const keyboard = new InlineKeyboard();
 
-      unsubscribed.forEach((cs) => {
+      unsubscribed.forEach((cs, index) => {
         const statusEmoji =
           cs.status === 'left' ? '🚫' : cs.status === 'kicked' ? '⛔' : '⏳';
 
         if (cs.status === 'left' && cs.channel.type === 'PRIVATE') {
-          message += `${statusEmoji} ${cs.channel.channelName} - So'rov yuborilmagan yoki rad etilgan\n`;
+          message += `${index + 1}. ${statusEmoji} ${cs.channel.channelName} - So'rov yuborilmagan\n`;
         } else if (cs.status === 'left') {
-          message += `${statusEmoji} ${cs.channel.channelName} - Obuna bo'lmagan\n`;
+          message += `${index + 1}. ${statusEmoji} ${cs.channel.channelName} - A'zo emas\n`;
+        } else if (cs.status === 'kicked') {
+          message += `${index + 1}. ${statusEmoji} ${cs.channel.channelName} - Bloklangan\n`;
         } else {
-          message += `${statusEmoji} ${cs.channel.channelName} - Admin tasdiqini kutmoqda\n`;
+          message += `${index + 1}. ${statusEmoji} ${cs.channel.channelName} - Tasdiq kutilmoqda\n`;
         }
 
         keyboard.url(cs.channel.channelName, cs.channel.channelLink).row();
       });
 
-      keyboard.text('✅ Tekshirish', 'check_subscription').row();
-      keyboard.text('💎 Premium sotib olish', 'show_premium');
+      message += "\n👆 Yuqoridagi kanallarga a'zo bo'lib, qayta tekshiring.";
 
-      await ctx.editMessageText(message, {
-        reply_markup: keyboard,
-      });
+      keyboard.text('✅ Tekshirish', 'check_subscription').row();
+      keyboard.text('💎 Premium', 'show_premium');
+
+      try {
+        await ctx.editMessageText(message, {
+          reply_markup: keyboard,
+        });
+      } catch (error) {
+        this.logger.error('Error updating subscription message:', error);
+        // If edit fails, send new message
+        await ctx.reply(message, { reply_markup: keyboard });
+      }
     }
   }
 
