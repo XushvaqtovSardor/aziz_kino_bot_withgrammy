@@ -390,8 +390,9 @@ export class SerialManagementService {
 
     if (movie) {
       // Handle movie episodes
-      const episodes = await this.movieEpisodeService.findByMovieId(movie.id);
-      const nextEpisodeNumber = episodes.length + 1;
+      // Note: movie.totalEpisodes includes the original video (episode 1)
+      // So if totalEpisodes = 1, next episode should be 2
+      const nextEpisodeNumber = movie.totalEpisodes + 1;
 
       this.sessionService.updateSessionData(ctx.from.id, {
         contentType: 'movie',
@@ -404,7 +405,7 @@ export class SerialManagementService {
       await ctx.reply(
         `🎬 Kino topildi!\n\n` +
           `🏷 ${movie.title}\n` +
-          `📹 Mavjud qismlar: ${episodes.length}\n\n` +
+          `📹 Mavjud qismlar: ${movie.totalEpisodes}\n\n` +
           `📹 ${nextEpisodeNumber}-qism videosini yuboring:`,
         AdminKeyboard.getCancelButton(),
       );
