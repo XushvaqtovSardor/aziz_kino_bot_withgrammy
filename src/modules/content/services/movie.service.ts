@@ -1,10 +1,14 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { MovieData } from '../interfaces/content-data.interface';
+import { CodeGeneratorService } from '../utils/code-generator.service';
 
 @Injectable()
 export class MovieService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private codeGenerator: CodeGeneratorService,
+  ) {}
 
   async create(data: MovieData) {
     const { thumbnailFileId, ...movieData } = data;
@@ -38,10 +42,7 @@ export class MovieService {
   }
 
   async isCodeAvailable(code: number): Promise<boolean> {
-    const movie = await this.prisma.movie.findUnique({
-      where: { code },
-    });
-    return !movie;
+    return this.codeGenerator.isCodeAvailable(String(code));
   }
 
   async findNearestAvailableCodes(

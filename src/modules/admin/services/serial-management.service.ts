@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { BotContext } from '../../../bot/bot.context';
 import { InlineKeyboard, Keyboard } from 'grammy';
 import { SerialService } from '../../content/services/serial.service';
+import { MovieService } from '../../content/services/movie.service';
 import { EpisodeService } from '../../content/services/episode.service';
 import { FieldService } from '../../field/services/field.service';
 import { ChannelService } from '../../channel/services/channel.service';
@@ -26,6 +27,7 @@ export class SerialManagementService {
 
   constructor(
     private serialService: SerialService,
+    private movieService: MovieService,
     private episodeService: EpisodeService,
     private fieldService: FieldService,
     private channelService: ChannelService,
@@ -37,7 +39,17 @@ export class SerialManagementService {
   async handleNewSerialCode(ctx: BotContext, code: number) {
     if (!ctx.from) return;
 
-    // Check if code is taken
+    // Check if code is taken by movie
+    const existingMovie = await this.movieService.findByCode(code.toString());
+    if (existingMovie) {
+      await ctx.reply(
+        `❌ ${code} kodi kino uchun ishlatilgan!\n\n🎬 ${existingMovie.title}\n\n⚠️ Boshqa kod tanlang:`,
+        AdminKeyboard.getCancelButton(),
+      );
+      return;
+    }
+
+    // Check if code is taken by serial
     const existingSerial = await this.serialService.findByCode(code.toString());
     if (existingSerial) {
       const nearestCodes = await this.serialService.findNearestAvailableCodes(
@@ -303,7 +315,6 @@ export class SerialManagementService {
       let posterMessageId = 0;
       if (postToField) {
         const caption = `
-<<<<<<< HEAD
 ╭────────────────────
 ├‣  Serial nomi : ${title}
 ├‣  Serial kodi: ${code}
@@ -312,15 +323,6 @@ export class SerialManagementService {
 ├‣  Kanal: ${selectedField.channelLink || '@' + selectedField.name}
 ╰────────────────────
 ▶️ Serialning to'liq qismlarini https://t.me/${this.grammyBot.botUsername}?start=s${code} dan tomosha qilishingiz mumkin!
-=======
-${title}
-
-${description || ''}
-
-📖 Qismlar: ${episodes.length}
-🎭 Janrlari: ${genre}
-🔖 Kanal: ${selectedField.channelLink || '@' + selectedField.name}
->>>>>>> 9e7ed34722035ce8c5e304e50c0ff830bf2359f3
         `.trim();
 
         const keyboard = new InlineKeyboard().url(
@@ -482,7 +484,6 @@ ${description || ''}
         const field = await this.fieldService.findOne(serial.fieldId);
         if (field) {
           const caption = `
-<<<<<<< HEAD
 ╭────────────────────
 ├‣  Serial nomi : ${serial.title}
 ├‣  Serial kodi: ${serial.code}
@@ -491,15 +492,6 @@ ${description || ''}
 ├‣  Kanal: ${field.channelLink || '@' + field.name}
 ╰────────────────────
 ▶️ Serialning to'liq qismlarini https://t.me/${this.grammyBot.botUsername}?start=s${serial.code} dan tomosha qilishingiz mumkin!
-=======
-${serial.title}
-
-${serial.description || ''}
-
-📖 Qismlar: ${allEpisodes.length}
-🎭 Janrlari: ${serial.genre}
-🔖 Kanal: ${field.channelLink || '@' + field.name}
->>>>>>> 9e7ed34722035ce8c5e304e50c0ff830bf2359f3
           `.trim();
 
           const keyboard = new InlineKeyboard().url(

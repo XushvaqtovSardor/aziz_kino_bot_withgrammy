@@ -1,10 +1,14 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { SerialData } from '../interfaces/content-data.interface';
+import { CodeGeneratorService } from '../utils/code-generator.service';
 
 @Injectable()
 export class SerialService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private codeGenerator: CodeGeneratorService,
+  ) {}
 
   async create(data: SerialData) {
     const codeNum =
@@ -53,26 +57,22 @@ export class SerialService {
     targetCode: number,
     limit: number = 5,
   ): Promise<number[]> {
-    // Find all codes in database
-    const existingSerials = await this.prisma.serial.findMany({
-      select: { code: true },
-      orderBy: { code: 'asc' },
-    });
-
-    const usedCodes = new Set(existingSerials.map((s) => s.code));
     const availableCodes: number[] = [];
-
-    // Search for available codes near targetCode
     let offset = 1;
+
+    // Search for available codes near targetCode (both Movie and Serial)
     while (availableCodes.length < limit && offset <= 1000) {
       const lowerCode = targetCode - offset;
       const upperCode = targetCode + offset;
 
-      if (lowerCode > 0 && !usedCodes.has(lowerCode)) {
+      if (
+        lowerCode > 0 &&
+        (await this.codeGenerator.isCodeAvailable(String(lowerCode)))
+      ) {
         availableCodes.push(lowerCode);
       }
 
-      if (!usedCodes.has(upperCode)) {
+      if (await this.codeGenerator.isCodeAvailable(String(upperCode))) {
         availableCodes.push(upperCode);
       }
 
