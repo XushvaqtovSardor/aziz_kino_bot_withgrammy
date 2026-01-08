@@ -95,7 +95,7 @@ export class AdminHandler implements OnModuleInit {
       this.withAdminCheck(this.startNewSerialCreation.bind(this)),
     );
     bot.hears(
-      "➕ Mavjud serialga qism qo'shish",
+      "➕ Mavjud kino/serialga qism qo'shish",
       this.withAdminCheck(this.startAddingEpisode.bind(this)),
     );
     bot.hears(
@@ -846,14 +846,19 @@ export class AdminHandler implements OnModuleInit {
     const keyboard = new Keyboard()
       .text('🆕 Yangi serial yaratish')
       .row()
-      .text("➕ Mavjud serialga qism qo'shish")
+      .text("➕ Mavjud kino/serialga qism qo'shish")
       .row()
       .text('❌ Bekor qilish')
       .resized();
 
-    await ctx.reply('📺 Serial boshqaruvi\n\nQaysi amalni bajarmoqchisiz?', {
-      reply_markup: keyboard,
-    });
+    await ctx.reply(
+      '📺 Serial boshqaruvi\n\nQaysi amalni bajarmoqchisiz?\n\n' +
+        '• Yangi serial yaratish\n' +
+        "• Kino yoki serialga yangi qism qo'shish",
+      {
+        reply_markup: keyboard,
+      },
+    );
   }
 
   private async startNewSerialCreation(ctx: BotContext) {
@@ -888,7 +893,9 @@ export class AdminHandler implements OnModuleInit {
     });
 
     await ctx.reply(
-      "📺 Serialga qism qo'shish\n\n" + 'Serial kodini kiriting:',
+      "� Kino yoki Serialga qism qo'shish\n\n" +
+        '🔢 Kino yoki serial kodini kiriting:\n' +
+        "⚠️ Kod raqamlardan iborat bo'lishi kerak",
       AdminKeyboard.getCancelButton(),
     );
   }
