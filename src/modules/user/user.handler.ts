@@ -576,28 +576,18 @@ Savollaringiz bo'lsa murojaat qiling:
       const botUsername = (await ctx.api.getMe()).username;
       const field = await this.fieldService.findOne(movie.fieldId);
 
-      // Show info message before video
-      const infoMessage = `
-╭────────────────────
-├‣  Kino nomi : ${movie.title}
-├‣  Kino kodi: ${movie.code}
-├‣  Qism: 1
-├‣  Janrlari: ${movie.genre || "Noma'lum"}
-├‣  Kanal: ${field?.channelLink || '@' + (field?.name || 'Kanal')}
-╰────────────────────
-▶️ Kinoning to'liq qismini https://t.me/${botUsername}?start=${movie.code} dan tomosha qilishingiz mumkin!
-      `.trim();
-
-      // await ctx.reply(infoMessage);
-
       if (movie.videoFileId) {
         const botUsername = (await ctx.api.getMe()).username;
         const shareLink = `https://t.me/share/url?url=https://t.me/${botUsername}?start=${movie.code}&text=🎬 ${encodeURIComponent(movie.title)}\n\n📖 Kod: ${movie.code}\n\n👇 Kinoni tomosha qilish uchun bosing:`;
-        const shareKeyboard = new InlineKeyboard().url(
-          '📤 Share qilish',
-          shareLink,
-        );
-this.logger.warn(`sendMovieToUser CALLED for ${code}`);
+
+        // Create keyboard with movie code button and share button
+        const movieDeepLink = `https://t.me/${botUsername}?start=${movie.code}`;
+        const shareKeyboard = new InlineKeyboard()
+          .url(`🎬 Kino kodi: ${movie.code}`, movieDeepLink)
+          .row()
+          .url('📤 Share qilish', shareLink);
+
+        this.logger.warn(`sendMovieToUser CALLED for ${code}`);
 
         // Video captioniga info qo‘shamiz
         const videoCaption = `
@@ -608,7 +598,7 @@ this.logger.warn(`sendMovieToUser CALLED for ${code}`);
 ├‣  Janrlari: ${movie.genre || "Noma'lum"}
 ├‣  Kanal: ${field?.channelLink || '@' + (field?.name || 'Kanal')}
 ╰────────────────────
-▶️ Kinoning to'liq qismini https://t.me/${botUsername}?start=${movie.code} dan tomosha qilishingiz mumkin!
+▶️ Kinoning to'liq qismini https://t.me/${botUsername} dan tomosha qilishingiz mumkin!
   `.trim();
 
         await ctx.replyWithVideo(movie.videoFileId, {
@@ -650,7 +640,7 @@ this.logger.warn(`sendMovieToUser CALLED for ${code}`);
       const episodes = await this.episodeService.findBySerialId(serial.id);
 
       const botUsername = (await ctx.api.getMe()).username;
-      const shareLink = `https://t.me/${botUsername}?start=serial_${code}`;
+      const serialDeepLink = `https://t.me/${botUsername}?start=s${code}`;
 
       const caption = `
 📺 **${serial.title}**
@@ -670,7 +660,12 @@ ${serial.genre ? `🎭 Janr: ${serial.genre}\n` : ''}${serial.description ? `\n�
       });
 
       if (episodes.length % 5 !== 0) keyboard.row();
-      keyboard.text('📤 Ulashish', `share_serial_${code}`);
+
+      // Add serial code button and share button
+      keyboard
+        .url(`📺 Serial kodi: ${serial.code}`, serialDeepLink)
+        .row()
+        .text('📤 Ulashish', `share_serial_${code}`);
 
       await ctx.replyWithPhoto(serial.posterFileId, {
         caption,
@@ -984,10 +979,12 @@ ${serial.genre ? `🎭 Janr: ${serial.genre}\n` : ''}${serial.description ? `\n�
       const serial = await this.serialService.findById(serialId);
       const botUsername = (await ctx.api.getMe()).username;
       const shareLink = `https://t.me/share/url?url=https://t.me/${botUsername}?start=s${serial.code}&text=📺 ${encodeURIComponent(serial.title)}\n\n📊 Qismlar: ${serial.totalEpisodes}\n📖 Kod: ${serial.code}\n\n👇 Serialni tomosha qilish uchun bosing:`;
-      const shareKeyboard = new InlineKeyboard().url(
-        '📤 Share qilish',
-        shareLink,
-      );
+      const serialDeepLink = `https://t.me/${botUsername}?start=s${serial.code}`;
+
+      const shareKeyboard = new InlineKeyboard()
+        .url(`📺 Serial kodi: ${serial.code}`, serialDeepLink)
+        .row()
+        .url('📤 Share qilish', shareLink);
 
       if (episode.videoFileId) {
         await ctx.replyWithVideo(episode.videoFileId, {
