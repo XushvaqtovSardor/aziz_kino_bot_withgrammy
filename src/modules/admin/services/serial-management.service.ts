@@ -44,10 +44,17 @@ export class SerialManagementService {
     // Check if code is taken by movie
     const existingMovie = await this.movieService.findByCode(code.toString());
     if (existingMovie) {
-      await ctx.reply(
-        `❌ ${code} kodi kino uchun ishlatilgan!\n\n🎬 ${existingMovie.title}\n\n⚠️ Boshqa kod tanlang:`,
-        AdminKeyboard.getCancelButton(),
+      const nearestCodes = await this.movieService.findNearestAvailableCodes(
+        code,
+        5,
       );
+      let message = `❌ ${code} kodi kino uchun ishlatilgan!\n\n🎬 ${existingMovie.title}\n\n`;
+      if (nearestCodes.length > 0) {
+        message += "✅ Bo'sh kodlar:\n";
+        nearestCodes.forEach((c, i) => (message += `${i + 1}. ${c}\n`));
+      }
+      message += '\n⚠️ Boshqa kod kiriting:';
+      await ctx.reply(message, AdminKeyboard.getCancelButton());
       return;
     }
 
