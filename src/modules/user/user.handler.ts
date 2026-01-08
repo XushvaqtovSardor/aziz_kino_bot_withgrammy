@@ -588,7 +588,7 @@ Savollaringiz bo'lsa murojaat qiling:
         this.logger.warn(`sendMovieToUser CALLED for ${code}`);
 
         // Video captioniga info qo‘shamiz
-       const videoCaption = `
+        const videoCaption = `
 ╭────────────────────
 ├‣  Kino nomi : ${movie.title}
 ├‣  Kino kodi: ${movie.code}
@@ -600,7 +600,7 @@ Savollaringiz bo'lsa murojaat qiling:
   `.trim();
 
         await ctx.replyWithVideo(movie.videoFileId, {
-          // caption: videoCaption,
+          caption: videoCaption,
           protect_content: true,
           reply_markup: shareKeyboard,
         });
