@@ -614,6 +614,7 @@ Savollaringiz bo'lsa murojaat qiling:
       this.logger.log(`User ${ctx.from.id} watched movie ${code}`);
     } catch (error) {
       this.logger.error(`Error sending movie ${code}:`, error);
+      this.logger.error(`Error stack:`, error.stack);
       await ctx.reply(
         "❌ Kino yuklashda xatolik yuz berdi. Iltimos admin bilan bog'laning.",
       );
