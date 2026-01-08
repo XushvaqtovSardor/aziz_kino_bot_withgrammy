@@ -843,6 +843,10 @@ ${serial.genre ? `🎭 Janr: ${serial.genre}\n` : ''}${serial.description ? `\n�
         continue;
       }
 
+      // Check if user has pending join request in cache
+      const cacheKey = `${ctx.from.id}_${channel.channelId}`;
+      const hasPendingRequest = this.joinRequestCache.has(cacheKey);
+
       try {
         const member = await ctx.api.getChatMember(
           channel.channelId,
@@ -850,7 +854,7 @@ ${serial.genre ? `🎭 Janr: ${serial.genre}\n` : ''}${serial.description ? `\n�
         );
 
         this.logger.log(
-          `[CheckSubscription] User ${ctx.from.id} status in ${channel.channelName}: ${member.status}`,
+          `[CheckSubscription] User ${ctx.from.id} status in ${channel.channelName}: ${member.status}, hasPendingRequest: ${hasPendingRequest}`,
         );
 
         const isSubscribed =
@@ -861,16 +865,24 @@ ${serial.genre ? `🎭 Janr: ${serial.genre}\n` : ''}${serial.description ? `\n�
             'is_member' in member &&
             member.is_member);
 
+        // If user is subscribed, mark as subscribed
+        // If user has pending request for private channel, also mark as subscribed (temporary)
+        const shouldAllowAccess =
+          isSubscribed || (hasPendingRequest && channel.type === 'PRIVATE');
+
         channelStatuses.push({
           channel,
           status: member.status,
-          subscribed: isSubscribed,
+          subscribed: shouldAllowAccess,
+          pending: hasPendingRequest,
         });
 
         if (isSubscribed) {
           await this.channelService.incrementMemberCount(channel.id);
           if (channel.type === 'PRIVATE') {
             await this.channelService.decrementPendingRequests(channel.id);
+            // Remove from cache if approved
+            this.joinRequestCache.delete(cacheKey);
           }
         }
       } catch (error) {
@@ -880,7 +892,8 @@ ${serial.genre ? `🎭 Janr: ${serial.genre}\n` : ''}${serial.description ? `\n�
         channelStatuses.push({
           channel,
           status: 'error',
-          subscribed: false,
+          subscribed: hasPendingRequest && channel.type === 'PRIVATE',
+          pending: hasPendingRequest,
         });
       }
     }
@@ -889,7 +902,7 @@ ${serial.genre ? `🎭 Janr: ${serial.genre}\n` : ''}${serial.description ? `\n�
     const unsubscribed = channelStatuses.filter((cs) => !cs.subscribed);
 
     if (unsubscribed.length === 0) {
-      // All channels subscribed - delete old message and send success
+      // All channels subscribed or have pending requests - delete old message and send success
       try {
         if (ctx.callbackQuery?.message) {
           await ctx.api.deleteMessage(
@@ -901,11 +914,20 @@ ${serial.genre ? `🎭 Janr: ${serial.genre}\n` : ''}${serial.description ? `\n�
         this.logger.warn('Could not delete subscription message:', error);
       }
 
-      // Send new success message
-      await ctx.reply(
-        "✅ Siz barcha kanallarga a'zo bo'ldingiz!\n\n🎬 Endi botdan foydalanishingiz mumkin.\n\n🔍 Kino yoki serial kodini yuboring.",
-        { reply_markup: { remove_keyboard: true } },
-      );
+      // Check if any are pending
+      const hasPending = channelStatuses.some((cs) => cs.pending);
+
+      if (hasPending) {
+        await ctx.reply(
+          "⏳ So'rovingiz qabul qilindi!\n\n📝 Private kanallarga kirish uchun admin tasdig'ini kutmoqdasiz.\n\n🎬 Shu vaqt ichida botdan foydalanishingiz mumkin.\n\n🔍 Kino yoki serial kodini yuboring.",
+          { reply_markup: { remove_keyboard: true } },
+        );
+      } else {
+        await ctx.reply(
+          "✅ Siz barcha kanallarga a'zo bo'ldingiz!\n\n🎬 Endi botdan foydalanishingiz mumkin.\n\n🔍 Kino yoki serial kodini yuboring.",
+          { reply_markup: { remove_keyboard: true } },
+        );
+      }
     } else {
       // Still have unsubscribed channels - update message
       let message = "❌ Quyidagi kanallarga hali a'zo bo'lmagansiniz:\n\n";
