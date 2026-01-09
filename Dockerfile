@@ -46,8 +46,6 @@ RUN addgroup -g 1001 -S nodejs && \
     chown -R nestjs:nodejs /app
 
 USER nestjs
-
-<<<<<<< HEAD
 # Railway uses PORT environment variable, default to 3000
 ENV PORT=3000
 EXPOSE $PORT
@@ -57,14 +55,4 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
     CMD node -e "require('http').get('http://localhost:' + (process.env.PORT || 3000) + '/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"
 
 # Start application with memory limit
-=======
-# Expose port
-EXPOSE 3000
-
-# Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
-    CMD node -e "require('http').get('http://localhost:3000/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"
-
-# Start application
->>>>>>> 9e7ed34722035ce8c5e304e50c0ff830bf2359f3
 CMD ["node", "--max-old-space-size=512", "dist/main"]

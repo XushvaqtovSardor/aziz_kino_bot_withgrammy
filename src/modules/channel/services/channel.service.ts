@@ -248,6 +248,116 @@ export class ChannelService {
     };
   }
 
+  /**
+   * Check which channels user has NOT subscribed to or sent join request
+   * Returns all unsubscribed channels including external ones
+   */
+  async checkUserSubscriptionStatus(
+    userId: number,
+    api: Api,
+    joinRequestCache: Map<string, number>,
+  ) {
+    const allChannels = await this.prisma.mandatoryChannel.findMany({
+      where: { isActive: true },
+      orderBy: { order: 'asc' },
+    });
+
+    const unsubscribedChannels: {
+      id: number;
+      channelId: string;
+      channelName: string;
+      channelLink: string;
+      type: string;
+      status?: string;
+      isExternal: boolean;
+    }[] = [];
+
+    const subscribedChannels: {
+      id: number;
+      channelId: string;
+      channelName: string;
+      type: string;
+      isSubscribed: boolean;
+      hasPendingRequest: boolean;
+    }[] = [];
+
+    for (const channel of allChannels) {
+      // External channels are always included in unsubscribed (user can't verify)
+      if (channel.type === 'EXTERNAL') {
+        unsubscribedChannels.push({
+          id: channel.id,
+          channelId: channel.channelId,
+          channelName: channel.channelName,
+          channelLink: channel.channelLink,
+          type: channel.type,
+          isExternal: true,
+        });
+        continue;
+      }
+
+      // Check cache for join requests
+      const cacheKey = `${userId}_${channel.channelId}`;
+      const hasPendingRequest = joinRequestCache.has(cacheKey);
+
+      try {
+        const member = await api.getChatMember(channel.channelId, userId);
+
+        const isSubscribed =
+          member.status === 'member' ||
+          member.status === 'administrator' ||
+          member.status === 'creator' ||
+          (member.status === 'restricted' &&
+            'is_member' in member &&
+            member.is_member);
+
+        // If subscribed OR has pending request for PRIVATE channel, mark as subscribed
+        if (isSubscribed || (hasPendingRequest && channel.type === 'PRIVATE')) {
+          subscribedChannels.push({
+            id: channel.id,
+            channelId: channel.channelId,
+            channelName: channel.channelName,
+            type: channel.type,
+            isSubscribed,
+            hasPendingRequest,
+          });
+        } else {
+          unsubscribedChannels.push({
+            id: channel.id,
+            channelId: channel.channelId,
+            channelName: channel.channelName,
+            channelLink: channel.channelLink,
+            type: channel.type,
+            status: member.status,
+            isExternal: false,
+          });
+        }
+      } catch (error) {
+        // If error (user not in channel), add to unsubscribed
+        unsubscribedChannels.push({
+          id: channel.id,
+          channelId: channel.channelId,
+          channelName: channel.channelName,
+          channelLink: channel.channelLink,
+          type: channel.type,
+          status: 'error',
+          isExternal: false,
+        });
+      }
+    }
+
+    return {
+      allChannels,
+      unsubscribedChannels,
+      subscribedChannels,
+      totalChannels: allChannels.length,
+      unsubscribedCount: unsubscribedChannels.length,
+      subscribedCount: subscribedChannels.length,
+      // User can access bot only if all non-external channels are subscribed
+      canAccessBot:
+        unsubscribedChannels.filter((ch) => !ch.isExternal).length === 0,
+    };
+  }
+
   async hasNewChannels(userId: number, lastCheckDate: Date): Promise<boolean> {
     const newChannels = await this.prisma.mandatoryChannel.count({
       where: {

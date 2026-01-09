@@ -732,177 +732,128 @@ ${serial.genre ? `🎭 Janr: ${serial.genre}\n` : ''}${serial.description ? `\n�
   ): Promise<boolean> {
     if (!ctx.from) return false;
 
-    const channels = await this.channelService.findAllMandatory();
-    if (channels.length === 0) return true;
+    const allChannels = await this.channelService.findAllMandatory();
+    if (allChannels.length === 0) return true;
 
-    const unsubscribedChannels = [];
+    // Get subscription status using new service method
+    const status = await this.channelService.checkUserSubscriptionStatus(
+      ctx.from.id,
+      ctx.api,
+      this.joinRequestCache,
+    );
 
-    for (const channel of channels) {
-      // External kanallarni tekshirmaymiz
-      if (channel.type === 'EXTERNAL') {
-        continue;
-      }
+    this.logger.log(
+      `User ${ctx.from.id} subscription check: ${status.subscribedCount}/${status.totalChannels} subscribed, ${status.unsubscribedCount} unsubscribed (${status.unsubscribedChannels.filter((ch) => ch.isExternal).length} external)`,
+    );
 
-      try {
-        const member = await ctx.api.getChatMember(
-          channel.channelId,
-          ctx.from.id,
-        );
-
-        this.logger.debug(
-          `User ${ctx.from.id} status in channel ${channel.channelName}: ${member.status}`,
-        );
-
-        // Check if user is subscribed or has pending join request
-        // For private channels, if user sent join request, let them continue
-        const isSubscribed =
-          member.status === 'member' ||
-          member.status === 'administrator' ||
-          member.status === 'creator' ||
-          (member.status === 'restricted' &&
-            'is_member' in member &&
-            member.is_member);
-
-        // For PRIVATE channels: If user has "left" status but we have pending request record, consider as subscribed
-        const hasPendingRequest =
-          channel.type === 'PRIVATE' && channel.pendingRequests > 0;
-
-        if (!isSubscribed && !hasPendingRequest) {
-          unsubscribedChannels.push(channel);
-        } else if (isSubscribed) {
-          // User kanalga a'zo, member count'ni oshiramiz
-          await this.channelService.incrementMemberCount(channel.id);
-
-          // Private kanal uchun pending request'larni kamaytiramiz
-          if (channel.type === 'PRIVATE') {
-            await this.channelService.decrementPendingRequests(channel.id);
-          }
-        } else if (hasPendingRequest) {
-          // User has pending request, let them continue
-          this.logger.log(
-            `User ${ctx.from.id} has pending request for ${channel.channelName}, allowing access`,
-          );
+    // Update member counts for subscribed channels
+    for (const subscribed of status.subscribedChannels) {
+      if (subscribed.isSubscribed) {
+        await this.channelService.incrementMemberCount(subscribed.id);
+        
+        // Decrement pending requests for private channels
+        if (subscribed.type === 'PRIVATE' && subscribed.hasPendingRequest) {
+          await this.channelService.decrementPendingRequests(subscribed.id);
+          // Remove from cache
+          const cacheKey = `${ctx.from.id}_${subscribed.channelId}`;
+          this.joinRequestCache.delete(cacheKey);
         }
-      } catch (error) {
-        this.logger.error(
-          `Error checking subscription for channel ${channel.channelName}:`,
-          error,
-        );
-        unsubscribedChannels.push(channel);
       }
     }
 
-    if (unsubscribedChannels.length > 0) {
-      let message = `❌ Kechirasiz, botimizdan foydalanish uchun ushbu kanallarga obuna bo'lishingiz kerak.
-
-<blockquote>💎 Premium obuna sotib olib, kanallarga obuna bo‘lmasdan foydalanishingiz mumkin.</blockquote>
-`;
-
-      const keyboard = new InlineKeyboard();
-
-      unsubscribedChannels.forEach((channel, index) => {
-        // message += `${index + 1}. ${channel.channelName}\n`;
-        keyboard.url(channel.channelName, channel.channelLink).row();
-      });
-
-      keyboard.text('✅ Tekshirish', 'check_subscription').row();
-      keyboard.text('💎 Premium sotib olish', 'show_premium');
-
-      // Kontent kodi bo‘lsa qo‘shib qo‘yamiz
-      if (contentCode && contentType) {
-        message += `\n🎬 Kino kodi: <b>${contentCode}</b>`;
-      }
-
-      await ctx.reply(message, {
-        parse_mode: 'HTML', // 🔥 MUHIM
-        reply_markup: keyboard,
-      });
-
-      return false;
+    // If user can access bot (all telegram channels subscribed), allow access
+    if (status.canAccessBot) {
+      return true;
     }
 
-    return true;
+    // Show ALL unsubscribed channels at once
+    let message = `❌ Botdan foydalanish uchun quyidagi kanallarga obuna bo'lishingiz yoki so'rov yuborishingiz kerak:\n\n`;
+    
+    // Count telegram and external channels
+    const telegramChannels = status.unsubscribedChannels.filter((ch) => !ch.isExternal);
+    const externalChannels = status.unsubscribedChannels.filter((ch) => ch.isExternal);
+    
+    if (telegramChannels.length > 0) {
+      message += `📱 <b>Telegram kanallar</b> (${telegramChannels.length}):\n`;
+      telegramChannels.forEach((channel, index) => {
+        const channelTypeEmoji = 
+          channel.type === 'PUBLIC' ? '🔓' :
+          channel.type === 'PRIVATE' ? '🔐' : '🔒';
+        message += `${index + 1}. ${channelTypeEmoji} ${channel.channelName}\n`;
+      });
+      message += '\n';
+    }
+    
+    if (externalChannels.length > 0) {
+      message += `🌐 <b>Tashqi sahifalar</b> (${externalChannels.length}):\n`;
+      externalChannels.forEach((channel, index) => {
+        message += `${index + 1}. 🔗 ${channel.channelName}\n`;
+      });
+      message += '\n';
+    }
+    
+    message += `✅ Telegram kanallariga obuna bo'ling yoki qo'shilish so'rovini yuboring.\n`;
+    message += `🌐 Tashqi sahifalarga obuna bo'lishingiz tavsiya etiladi (majburiy emas).\n\n`;
+    message += `<blockquote>💎 Premium obuna sotib olib, kanallarga obuna bo'lmasdan foydalanishingiz mumkin.</blockquote>`;
+
+    const keyboard = new InlineKeyboard();
+
+    // Add all channel buttons
+    status.unsubscribedChannels.forEach((channel) => {
+      const emoji = channel.isExternal ? '🌐' : '📱';
+      keyboard.url(`${emoji} ${channel.channelName}`, channel.channelLink).row();
+    });
+
+    keyboard.text('✅ Tekshirish', 'check_subscription').row();
+    keyboard.text('💎 Premium sotib olish', 'show_premium');
+
+    // Add content code if provided
+    if (contentCode && contentType) {
+      message += `\n🎬 Kino kodi: <b>${contentCode}</b>`;
+    }
+
+    await ctx.reply(message, {
+      parse_mode: 'HTML',
+      reply_markup: keyboard,
+    });
+
+    return false;
   }
+
+
 
   private async handleCheckSubscription(ctx: BotContext) {
     if (!ctx.callbackQuery || !ctx.from) return;
 
     await ctx.answerCallbackQuery({ text: 'Tekshirilmoqda...' });
 
-    // Get all mandatory channels
-    const channels = await this.channelService.findAllMandatory();
-    const channelStatuses = [];
+    // Use new service method to check subscription status
+    const status = await this.channelService.checkUserSubscriptionStatus(
+      ctx.from.id,
+      ctx.api,
+      this.joinRequestCache,
+    );
 
-    for (const channel of channels) {
-      if (channel.type === 'EXTERNAL') {
-        channelStatuses.push({
-          channel,
-          status: 'external',
-          subscribed: true,
-        });
-        continue;
-      }
+    this.logger.log(
+      `[CheckSubscription] User ${ctx.from.id}: ${status.subscribedCount}/${status.totalChannels} subscribed, ${status.unsubscribedCount} unsubscribed`,
+    );
 
-      // Check if user has pending join request in cache
-      const cacheKey = `${ctx.from.id}_${channel.channelId}`;
-      const hasPendingRequest = this.joinRequestCache.has(cacheKey);
+    // Update member counts for subscribed channels
+    for (const subscribed of status.subscribedChannels) {
+      if (subscribed.isSubscribed) {
+        await this.channelService.incrementMemberCount(subscribed.id);
 
-      try {
-        const member = await ctx.api.getChatMember(
-          channel.channelId,
-          ctx.from.id,
-        );
-
-        this.logger.log(
-          `[CheckSubscription] User ${ctx.from.id} status in ${channel.channelName}: ${member.status}, hasPendingRequest: ${hasPendingRequest}`,
-        );
-
-        const isSubscribed =
-          member.status === 'member' ||
-          member.status === 'administrator' ||
-          member.status === 'creator' ||
-          (member.status === 'restricted' &&
-            'is_member' in member &&
-            member.is_member);
-
-        // If user is subscribed, mark as subscribed
-        // If user has pending request for private channel, also mark as subscribed (temporary)
-        const shouldAllowAccess =
-          isSubscribed || (hasPendingRequest && channel.type === 'PRIVATE');
-
-        channelStatuses.push({
-          channel,
-          status: member.status,
-          subscribed: shouldAllowAccess,
-          pending: hasPendingRequest,
-        });
-
-        if (isSubscribed) {
-          await this.channelService.incrementMemberCount(channel.id);
-          if (channel.type === 'PRIVATE') {
-            await this.channelService.decrementPendingRequests(channel.id);
-            // Remove from cache if approved
-            this.joinRequestCache.delete(cacheKey);
-          }
+        if (subscribed.type === 'PRIVATE' && subscribed.hasPendingRequest) {
+          await this.channelService.decrementPendingRequests(subscribed.id);
+          const cacheKey = `${ctx.from.id}_${subscribed.channelId}`;
+          this.joinRequestCache.delete(cacheKey);
         }
-      } catch (error) {
-        this.logger.error(
-          `Error checking ${channel.channelName}: ${error.message}`,
-        );
-        channelStatuses.push({
-          channel,
-          status: 'error',
-          subscribed: hasPendingRequest && channel.type === 'PRIVATE',
-          pending: hasPendingRequest,
-        });
       }
     }
 
-    // Check if all subscribed
-    const unsubscribed = channelStatuses.filter((cs) => !cs.subscribed);
-
-    if (unsubscribed.length === 0) {
-      // All channels subscribed or have pending requests - delete old message and send success
+    // Check if user can access bot (all telegram channels subscribed)
+    if (status.canAccessBot) {
+      // Delete old message
       try {
         if (ctx.callbackQuery?.message) {
           await ctx.api.deleteMessage(
@@ -914,8 +865,10 @@ ${serial.genre ? `🎭 Janr: ${serial.genre}\n` : ''}${serial.description ? `\n�
         this.logger.warn('Could not delete subscription message:', error);
       }
 
-      // Check if any are pending
-      const hasPending = channelStatuses.some((cs) => cs.pending);
+      // Check if any have pending requests
+      const hasPending = status.subscribedChannels.some(
+        (ch) => ch.hasPendingRequest,
+      );
 
       if (hasPending) {
         await ctx.reply(
@@ -924,47 +877,74 @@ ${serial.genre ? `🎭 Janr: ${serial.genre}\n` : ''}${serial.description ? `\n�
         );
       } else {
         await ctx.reply(
-          "✅ Siz barcha kanallarga a'zo bo'ldingiz!\n\n🎬 Endi botdan foydalanishingiz mumkin.\n\n🔍 Kino yoki serial kodini yuboring.",
+          "✅ Siz barcha Telegram kanallariga obuna bo'ldingiz!\n\n🎬 Endi botdan foydalanishingiz mumkin.\n\n🔍 Kino yoki serial kodini yuboring.",
           { reply_markup: { remove_keyboard: true } },
         );
       }
-    } else {
-      // Still have unsubscribed channels - update message
-      let message = "❌ Quyidagi kanallarga hali a'zo bo'lmagansiniz:\n\n";
+      return;
+    }
 
-      const keyboard = new InlineKeyboard();
+    // Still have unsubscribed channels - update message with detailed info
+    const telegramChannels = status.unsubscribedChannels.filter(
+      (ch) => !ch.isExternal,
+    );
+    const externalChannels = status.unsubscribedChannels.filter(
+      (ch) => ch.isExternal,
+    );
 
-      unsubscribed.forEach((cs, index) => {
-        const statusEmoji =
-          cs.status === 'left' ? '🚫' : cs.status === 'kicked' ? '⛔' : '⏳';
+    let message = `❌ Quyidagi kanallarga hali obuna bo'lmadingiz yoki so'rov yubormadingiz:\n\n`;
 
-        if (cs.status === 'left' && cs.channel.type === 'PRIVATE') {
-          message += `${index + 1}. ${statusEmoji} ${cs.channel.channelName} - So'rov yuborilmagan\n`;
-        } else if (cs.status === 'left') {
-          message += `${index + 1}. ${statusEmoji} ${cs.channel.channelName} - A'zo emas\n`;
-        } else if (cs.status === 'kicked') {
-          message += `${index + 1}. ${statusEmoji} ${cs.channel.channelName} - Bloklangan\n`;
-        } else {
-          message += `${index + 1}. ${statusEmoji} ${cs.channel.channelName} - Tasdiq kutilmoqda\n`;
-        }
-
-        keyboard.url(cs.channel.channelName, cs.channel.channelLink).row();
+    if (telegramChannels.length > 0) {
+      message += `📱 <b>Telegram kanallar</b> (${telegramChannels.length}):\n`;
+      telegramChannels.forEach((channel, index) => {
+        const emoji =
+          channel.type === 'PUBLIC'
+            ? '🔓'
+            : channel.type === 'PRIVATE'
+              ? '🔐'
+              : '🔒';
+        const statusText =
+          channel.status === 'left' ? "A'zo emas" : "So'rov yuborilmagan";
+        message += `${index + 1}. ${emoji} ${channel.channelName} - ${statusText}\n`;
       });
+      message += '\n';
+    }
 
-      message += "\n👆 Yuqoridagi kanallarga a'zo bo'lib, qayta tekshiring.";
+    if (externalChannels.length > 0) {
+      message += `🌐 <b>Tashqi sahifalar</b> (${externalChannels.length}):\n`;
+      externalChannels.forEach((channel, index) => {
+        message += `${index + 1}. 🔗 ${channel.channelName}\n`;
+      });
+      message += '\n';
+    }
 
-      keyboard.text('✅ Tekshirish', 'check_subscription').row();
-      keyboard.text('💎 Premium', 'show_premium');
+    message +=
+      "👆 Yuqoridagi Telegram kanallariga obuna bo'ling yoki so'rov yuboring va qayta tekshiring.";
 
-      try {
-        await ctx.editMessageText(message, {
-          reply_markup: keyboard,
-        });
-      } catch (error) {
-        this.logger.error('Error updating subscription message:', error);
-        // If edit fails, send new message
-        await ctx.reply(message, { reply_markup: keyboard });
-      }
+    const keyboard = new InlineKeyboard();
+
+    // Add all unsubscribed channel buttons
+    status.unsubscribedChannels.forEach((channel) => {
+      const emoji = channel.isExternal ? '🌐' : '📱';
+      keyboard
+        .url(`${emoji} ${channel.channelName}`, channel.channelLink)
+        .row();
+    });
+
+    keyboard.text('✅ Tekshirish', 'check_subscription').row();
+    keyboard.text('💎 Premium', 'show_premium');
+
+    try {
+      await ctx.editMessageText(message, {
+        parse_mode: 'HTML',
+        reply_markup: keyboard,
+      });
+    } catch (error) {
+      this.logger.error('Error updating subscription message:', error);
+      await ctx.reply(message, {
+        parse_mode: 'HTML',
+        reply_markup: keyboard,
+      });
     }
   }
 
