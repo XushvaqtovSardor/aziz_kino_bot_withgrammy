@@ -15,6 +15,7 @@ import { SessionService } from './services/session.service';
 import { PremiumService } from '../payment/services/premium.service';
 import { SettingsService } from '../settings/services/settings.service';
 import { GrammyBotService } from '../../common/grammy/grammy-bot.module';
+import { PrismaService } from '../../prisma/prisma.service';
 import { ChannelType } from '@prisma/client';
 import {
   AdminState,
@@ -42,6 +43,7 @@ export class AdminHandler implements OnModuleInit {
     private premiumService: PremiumService,
     private settingsService: SettingsService,
     private grammyBot: GrammyBotService,
+    private prisma: PrismaService,
   ) {}
 
   onModuleInit() {
@@ -166,6 +168,14 @@ export class AdminHandler implements OnModuleInit {
       '🌐 Web Panel',
       this.withAdminCheck(this.showWebPanel.bind(this)),
     );
+    bot.hears(
+      '👥 Barcha foydalanuvchilar',
+      this.withAdminCheck(this.showAllUsers.bind(this)),
+    );
+    bot.hears(
+      '🚫 Foydalanuvchini bloklash',
+      this.withAdminCheck(this.startBlockUser.bind(this)),
+    );
 
     // Callback query handlers - all with admin check
     bot.callbackQuery(/^field_detail_(\d+)$/, async (ctx) => {
@@ -201,6 +211,69 @@ export class AdminHandler implements OnModuleInit {
     bot.callbackQuery(/^reject_payment_(\d+)$/, async (ctx) => {
       const admin = await this.getAdmin(ctx);
       if (admin) await this.rejectPayment(ctx);
+    });
+
+    bot.callbackQuery(
+      /^confirm_premiere_(movie|serial)_(\d+)$/,
+      async (ctx) => {
+        const admin = await this.getAdmin(ctx);
+        if (admin) await this.confirmPremiereBroadcast(ctx);
+      },
+    );
+
+    bot.callbackQuery('cancel_premiere', async (ctx) => {
+      const admin = await this.getAdmin(ctx);
+      if (admin) {
+        this.sessionService.clearSession(ctx.from.id);
+        await ctx.editMessageReplyMarkup({
+          reply_markup: { inline_keyboard: [] },
+        });
+        await ctx.answerCallbackQuery('❌ Bekor qilindi');
+        await ctx.reply(
+          "❌ Premyera e'loni bekor qilindi",
+          AdminKeyboard.getAdminMainMenu(admin.role),
+        );
+      }
+    });
+
+    bot.callbackQuery('confirm_telegram_premium_broadcast', async (ctx) => {
+      const admin = await this.getAdmin(ctx);
+      if (admin) await this.confirmTelegramPremiumBroadcast(ctx);
+    });
+
+    bot.callbackQuery('cancel_telegram_premium_broadcast', async (ctx) => {
+      const admin = await this.getAdmin(ctx);
+      if (admin) {
+        this.sessionService.clearSession(ctx.from.id);
+        await ctx.editMessageReplyMarkup({
+          reply_markup: { inline_keyboard: [] },
+        });
+        await ctx.answerCallbackQuery('❌ Bekor qilindi');
+        await ctx.reply(
+          '❌ Telegram Premium yuborish bekor qilindi',
+          AdminKeyboard.getAdminMainMenu(admin.role),
+        );
+      }
+    });
+
+    bot.callbackQuery(/^confirm_block_user_(\d+)$/, async (ctx) => {
+      const admin = await this.getAdmin(ctx);
+      if (admin) await this.confirmBlockUser(ctx);
+    });
+
+    bot.callbackQuery('cancel_block_user', async (ctx) => {
+      const admin = await this.getAdmin(ctx);
+      if (admin) {
+        this.sessionService.clearSession(ctx.from.id);
+        await ctx.editMessageReplyMarkup({
+          reply_markup: { inline_keyboard: [] },
+        });
+        await ctx.answerCallbackQuery('❌ Bekor qilindi');
+        await ctx.reply(
+          '❌ Bloklash bekor qilindi',
+          AdminKeyboard.getAdminMainMenu(admin.role),
+        );
+      }
     });
 
     bot.callbackQuery('add_new_admin', async (ctx) => {
@@ -392,7 +465,19 @@ export class AdminHandler implements OnModuleInit {
 📈 **Yangi foydalanuvchilar (30 kun):** ${newUsers}
       `;
 
-      await ctx.reply(message, { parse_mode: 'Markdown' });
+      // Create keyboard with additional options
+      const keyboard = new Keyboard()
+        .text('👥 Barcha foydalanuvchilar')
+        .row()
+        .text('🚫 Foydalanuvchini bloklash')
+        .row()
+        .text('🔙 Orqaga')
+        .resized();
+
+      await ctx.reply(message, {
+        parse_mode: 'Markdown',
+        reply_markup: keyboard,
+      });
     } catch (error) {
       this.logger.error('Error showing statistics:', error);
       await ctx.reply('❌ Statistikani olishda xatolik yuz berdi.');
@@ -700,6 +785,21 @@ export class AdminHandler implements OnModuleInit {
         break;
       case AdminState.SEARCH_CHANNEL_BY_LINK:
         await this.searchChannelByLink(ctx, text);
+        break;
+      case AdminState.APPROVE_PAYMENT:
+        await this.handleApprovePaymentSteps(ctx, text, session);
+        break;
+      case AdminState.REJECT_PAYMENT:
+        await this.handleRejectPaymentSteps(ctx, text, session);
+        break;
+      case AdminState.BROADCAST_PREMIERE:
+        await this.handlePremiereBroadcastSteps(ctx, text, session);
+        break;
+      case AdminState.BROADCAST_TELEGRAM_PREMIUM:
+        await this.handleTelegramPremiumBroadcastSteps(ctx, text, session);
+        break;
+      case AdminState.BLOCK_USER:
+        await this.handleBlockUserSteps(ctx, text, session);
         break;
       default:
         this.logger.warn(`Unhandled session state: ${session.state}`);
@@ -1286,7 +1386,11 @@ export class AdminHandler implements OnModuleInit {
     let message = '💾 Database kanallar:\n\n';
     channels.forEach((ch, i) => {
       message += `${i + 1}. ${ch.channelName}\n`;
-      message += `   ID: ${ch.channelId}\n\n`;
+      message += `   ID: ${ch.channelId}\n`;
+      if (ch.channelLink) {
+        message += `   Link: ${ch.channelLink}\n`;
+      }
+      message += `\n`;
     });
 
     const inlineKeyboard = new InlineKeyboard();
@@ -1381,31 +1485,85 @@ export class AdminHandler implements OnModuleInit {
 
   private async approvePayment(ctx: BotContext) {
     const admin = await this.getAdmin(ctx);
-    if (!admin) return;
+    if (!admin || !ctx.from) return;
+
+    await ctx.answerCallbackQuery();
 
     const paymentId = parseInt(ctx.match![1] as string);
     const payment = await this.paymentService.findById(paymentId);
 
-    await this.paymentService.approve(paymentId, admin.id, payment.duration);
-    await ctx.answerCallbackQuery({ text: '✅ Tolov tasdiqlandi' });
-    await ctx.editMessageCaption({
-      caption: '✅ Tolov tasdiqlandi va premium berildi',
+    if (!payment) {
+      await ctx.reply("❌ To'lov topilmadi.");
+      return;
+    }
+
+    // Start session to ask for duration
+    this.sessionService.startSession(
+      ctx.from.id,
+      AdminState.APPROVE_PAYMENT,
+    );
+    this.sessionService.updateSessionData(ctx.from.id, {
+      paymentId,
+      userId: payment.userId,
+      amount: payment.amount,
     });
+
+    const keyboard = new Keyboard()
+      .text('30 kun (1 oy)')
+      .text('90 kun (3 oy)')
+      .row()
+      .text('180 kun (6 oy)')
+      .text('365 kun (1 yil)')
+      .row()
+      .text('❌ Bekor qilish')
+      .resized();
+
+    await ctx.reply(
+      `💎 **Premium berish**\n\n` +
+        `👤 Foydalanuvchi: ${payment.user.firstName}\n` +
+        `💰 Summa: ${payment.amount.toLocaleString()} UZS\n\n` +
+        `📅 Necha kunlik premium berasiz?\n` +
+        `Kunlar sonini yozing yoki pastdagi tugmalardan tanlang:`,
+      { parse_mode: 'Markdown', reply_markup: keyboard },
+    );
   }
 
   private async rejectPayment(ctx: BotContext) {
     const admin = await this.getAdmin(ctx);
-    if (!admin) return;
+    if (!admin || !ctx.from) return;
+
+    await ctx.answerCallbackQuery();
 
     const paymentId = parseInt(ctx.match![1] as string);
-    await this.paymentService.reject(
-      paymentId,
-      admin.id,
-      'Admin tomonidan rad etildi',
-    );
+    const payment = await this.paymentService.findById(paymentId);
 
-    await ctx.answerCallbackQuery({ text: '❌ Tolov rad etildi' });
-    await ctx.editMessageCaption({ caption: '❌ Tolov rad etildi' });
+    if (!payment) {
+      await ctx.reply("❌ To'lov topilmadi.");
+      return;
+    }
+
+    // Start session to ask for rejection reason
+    this.sessionService.startSession(ctx.from.id, AdminState.REJECT_PAYMENT);
+    this.sessionService.updateSessionData(ctx.from.id, {
+      paymentId,
+      userId: payment.userId,
+    });
+
+    const keyboard = new Keyboard()
+      .text("Noto'g'ri chek")
+      .text('Pul tushmagantype')
+      .row()
+      .text('Boshqa sabab')
+      .text('❌ Bekor qilish')
+      .resized();
+
+    await ctx.reply(
+      `❌ **To'lovni rad etish**\n\n` +
+        `👤 Foydalanuvchi: ${payment.user.firstName}\n` +
+        `💰 Summa: ${payment.amount.toLocaleString()} UZS\n\n` +
+        `📝 Rad etish sababini yozing:`,
+      { parse_mode: 'Markdown', reply_markup: keyboard },
+    );
   }
 
   // ==================== ADMIN MANAGEMENT ====================
@@ -1746,6 +1904,10 @@ Qaysi guruhga xabar yubormoqchisiz?
       .text('💎 Faqat Premium', 'broadcast_premium')
       .text('🆓 Faqat Oddiy', 'broadcast_free')
       .row()
+      .text('🎬 Kino premyera', 'broadcast_premiere')
+      .row()
+      .text('⭐️ Telegram Premium', 'broadcast_telegram_premium')
+      .row()
       .text('🔙 Orqaga', 'back_to_admin_menu');
 
     await ctx.reply(message, {
@@ -1758,10 +1920,22 @@ Qaysi guruhga xabar yubormoqchisiz?
     if (!ctx.callbackQuery || !('data' in ctx.callbackQuery) || !ctx.from)
       return;
 
-    const broadcastType = ctx.callbackQuery.data
-      .replace('broadcast_', '')
-      .toUpperCase();
+    const callbackData = ctx.callbackQuery.data;
     await ctx.answerCallbackQuery();
+
+    // Handle premiere broadcast separately
+    if (callbackData === 'broadcast_premiere') {
+      await this.startPremiereBroadcast(ctx);
+      return;
+    }
+
+    // Handle Telegram Premium broadcast separately
+    if (callbackData === 'broadcast_telegram_premium') {
+      await this.startTelegramPremiumBroadcast(ctx);
+      return;
+    }
+
+    const broadcastType = callbackData.replace('broadcast_', '').toUpperCase();
 
     // Start broadcast session
     this.sessionService.startSession(ctx.from.id, 'BROADCASTING' as any);
@@ -1912,15 +2086,23 @@ Qaysi guruhga xabar yubormoqchisiz?
           const chat = await ctx.api.getChat(channelId);
           const channelName = 'title' in chat ? chat.title : channelId;
 
+          // Try to get channel link if it's a public channel
+          let channelLink: string | undefined;
+          if ('username' in chat && chat.username) {
+            channelLink = `https://t.me/${chat.username}`;
+          }
+
           await this.channelService.createDatabaseChannel({
             channelId,
             channelName,
+            channelLink,
             isActive: true,
           });
 
           this.sessionService.clearSession(ctx.from.id);
+          const linkInfo = channelLink ? `\n🔗 ${channelLink}` : '';
           await ctx.reply(
-            `✅ Database kanal muvaffaqiyatli qo'shildi!\n\n📢 ${channelName}\n🆔 ${channelId}`,
+            `✅ Database kanal muvaffaqiyatli qo'shildi!\n\n📢 ${channelName}\n🆔 ${channelId}${linkInfo}`,
             AdminKeyboard.getAdminMainMenu(admin.role),
           );
         } catch (error) {
@@ -2840,6 +3022,778 @@ ${existingSerial.description || ''}
         '❌ Xabar yuborishda xatolik yuz berdi.',
         AdminKeyboard.getAdminMainMenu(admin.role),
       );
+      this.sessionService.clearSession(ctx.from.id);
+    }
+  }
+
+  // ==================== PAYMENT APPROVAL ====================
+  private async handleApprovePaymentSteps(
+    ctx: BotContext,
+    text: string,
+    session: any,
+  ) {
+    const admin = await this.getAdmin(ctx);
+    if (!admin || !ctx.from) return;
+
+    const { paymentId, userId, amount } = session.data;
+
+    // Parse duration from text or button
+    let durationDays: number;
+
+    if (text === '30 kun (1 oy)') {
+      durationDays = 30;
+    } else if (text === '90 kun (3 oy)') {
+      durationDays = 90;
+    } else if (text === '180 kun (6 oy)') {
+      durationDays = 180;
+    } else if (text === '365 kun (1 yil)') {
+      durationDays = 365;
+    } else {
+      // Try to parse as number
+      durationDays = parseInt(text);
+      if (isNaN(durationDays) || durationDays <= 0) {
+        await ctx.reply(
+          "❌ Noto'g'ri format! Kunlar sonini kiriting (masalan: 30) yoki pastdagi tugmalardan tanlang.",
+        );
+        return;
+      }
+    }
+
+    try {
+      // Approve payment and give premium
+      await this.paymentService.approve(paymentId, admin.id, durationDays);
+
+      // Get payment details
+      const payment = await this.paymentService.findById(paymentId);
+
+      // Send notification to user
+      try {
+        const expiresDate = new Date();
+        expiresDate.setDate(expiresDate.getDate() + durationDays);
+
+        await this.grammyBot.bot.api.sendMessage(
+          payment.user.telegramId,
+          `✅ **To'lovingiz tasdiqlandi!**\n\n` +
+            `💎 Premium: Faol\n` +
+            `⏱ Muddati: ${durationDays} kun\n` +
+            `📅 Tugash sanasi: ${expiresDate.toLocaleDateString('uz-UZ')}\n\n` +
+            `🎉 Endi barcha imkoniyatlardan foydalanishingiz mumkin!`,
+          { parse_mode: 'Markdown' },
+        );
+      } catch (error) {
+        this.logger.error('Error notifying user:', error);
+      }
+
+      // Clear session and show success
+      this.sessionService.clearSession(ctx.from.id);
+
+      await ctx.reply(
+        `✅ To'lov tasdiqlandi!\n\n` +
+          `👤 Foydalanuvchi: ${payment.user.firstName}\n` +
+          `💎 Premium muddati: ${durationDays} kun\n` +
+          `💰 Summa: ${amount.toLocaleString()} UZS`,
+        AdminKeyboard.getAdminMainMenu(admin.role),
+      );
+    } catch (error) {
+      this.logger.error('Error approving payment:', error);
+      await ctx.reply(
+        "❌ To'lovni tasdiqlashda xatolik yuz berdi.",
+        AdminKeyboard.getAdminMainMenu(admin.role),
+      );
+      this.sessionService.clearSession(ctx.from.id);
+    }
+  }
+
+  private async handleRejectPaymentSteps(
+    ctx: BotContext,
+    text: string,
+    session: any,
+  ) {
+    const admin = await this.getAdmin(ctx);
+    if (!admin || !ctx.from) return;
+
+    const { paymentId, userId } = session.data;
+
+    // Use predefined reason or custom text
+    let reason = text;
+    if (text === "Noto'g'ri chek") {
+      reason = "Yuborilgan chek noto'g'ri yoki o'qib bo'lmaydi";
+    } else if (text === 'Pul tushmagan') {
+      reason = "To'lov hali kartaga tushmagan";
+    } else if (text === 'Boshqa sabab') {
+      await ctx.reply(
+        '📝 Rad etish sababini yozing:',
+        AdminKeyboard.getCancelButton(),
+      );
+      return;
+    }
+
+    try {
+      // Reject payment
+      await this.paymentService.reject(paymentId, admin.id, reason);
+
+      // Get payment details
+      const payment = await this.paymentService.findById(paymentId);
+
+      // Send notification to user
+      try {
+        await this.grammyBot.bot.api.sendMessage(
+          payment.user.telegramId,
+          `❌ **To'lovingiz rad etildi**\n\n` +
+            `📝 Sabab: ${reason}\n\n` +
+            `💡 Iltimos, to\'g\'ri chekni qayta yuboring yoki admin bilan bog\'laning.`,
+          { parse_mode: 'Markdown' },
+        );
+      } catch (error) {
+        this.logger.error('Error notifying user:', error);
+      }
+
+      // Clear session and show success
+      this.sessionService.clearSession(ctx.from.id);
+
+      await ctx.reply(
+        `❌ To'lov rad etildi!\n\n` +
+          `👤 Foydalanuvchi: ${payment.user.firstName}\n` +
+          `📝 Sabab: ${reason}`,
+        AdminKeyboard.getAdminMainMenu(admin.role),
+      );
+    } catch (error) {
+      this.logger.error('Error rejecting payment:', error);
+      await ctx.reply(
+        "❌ To'lovni rad etishda xatolik yuz berdi.",
+        AdminKeyboard.getAdminMainMenu(admin.role),
+      );
+      this.sessionService.clearSession(ctx.from.id);
+    }
+  }
+
+  private async startPremiereBroadcast(ctx: any) {
+    try {
+      // Get admin info
+      const admin = await this.adminService.getAdminByTelegramId(ctx.from.id);
+      if (!admin) {
+        await ctx.reply('⛔️ Admin topilmadi.');
+        return;
+      }
+
+      // Start session
+      this.sessionService.startSession(
+        ctx.from.id,
+        AdminState.BROADCAST_PREMIERE,
+      );
+      this.sessionService.updateSessionData(ctx.from.id, {});
+
+      await ctx.reply(
+        '🎬 Kino yoki serial kodini kiriting:\n\n' +
+          'Masalan: 100 (kino uchun) yoki s200 (serial uchun)',
+        {
+          reply_markup: {
+            keyboard: [[{ text: '❌ Bekor qilish' }]],
+            resize_keyboard: true,
+          },
+        },
+      );
+    } catch (error) {
+      this.logger.error('Error starting premiere broadcast:', error);
+      await ctx.reply('❌ Xatolik yuz berdi.');
+    }
+  }
+
+  private async handlePremiereBroadcastSteps(
+    ctx: any,
+    text: string,
+    session: any,
+  ) {
+    try {
+      // Check for cancel
+      if (text === '❌ Bekor qilish') {
+        this.sessionService.clearSession(ctx.from.id);
+        const admin = await this.adminService.getAdminByTelegramId(ctx.from.id);
+        await ctx.reply(
+          '❌ Bekor qilindi',
+          AdminKeyboard.getAdminMainMenu(admin?.role || 'ADMIN'),
+        );
+        return;
+      }
+
+      // Parse code - check if serial (starts with 's') or movie
+      const isSerial = text.toLowerCase().startsWith('s');
+      const code = isSerial ? text.substring(1) : text;
+
+      if (!code || isNaN(Number(code))) {
+        await ctx.reply(
+          "❌ Noto'g'ri format! Masalan: 100 yoki s200\n\nQayta kiriting:",
+        );
+        return;
+      }
+
+      const codeNumber = parseInt(code);
+
+      // Fetch content
+      let content: any;
+      let contentType: string;
+
+      if (isSerial) {
+        content = await this.prisma.serial.findUnique({
+          where: { code: codeNumber },
+          include: {
+            episodes: true,
+          },
+        });
+        contentType = 'serial';
+      } else {
+        content = await this.prisma.movie.findUnique({
+          where: { code: codeNumber },
+          include: {
+            episodes: true,
+          },
+        });
+        contentType = 'movie';
+      }
+
+      if (!content) {
+        await ctx.reply(
+          '❌ Kontent topilmadi!\n\nQayta kiriting yoki ❌ Bekor qilish tugmasini bosing:',
+        );
+        return;
+      }
+
+      // Get field info for channel link
+      const field = await this.prisma.field.findUnique({
+        where: { id: content.fieldId },
+      });
+
+      // Format message
+      const caption =
+        '╭────────────────────\n' +
+        `├‣ ${isSerial ? 'Serial' : 'Kino'} nomi : ${content.title}\n` +
+        `├‣ ${isSerial ? 'Serial' : 'Kino'} kodi: ${isSerial ? 's' : ''}${content.code}\n` +
+        `├‣ Qism: ${content.episodes?.length || 0}\n` +
+        `├‣ Janrlari: ${content.genre || "Noma'lum"}\n` +
+        `├‣ Kanal: @${field?.name || 'Kanal'}\n` +
+        '╰────────────────────\n' +
+        `▶️ ${isSerial ? 'Serialning' : 'Kinoning'} to'liq qismini @${ctx.me.username} dan tomosha qilishingiz mumkin!`;
+
+      // Get all users
+      const users = await this.prisma.user.findMany({
+        where: { isBlocked: false },
+      });
+
+      // Send confirmation to admin first
+      if (content.poster) {
+        await ctx.replyWithPhoto(content.poster, {
+          caption:
+            '📤 Quyidagi xabar barcha foydalanuvchilarga yuboriladi:\n\n' +
+            caption,
+          reply_markup: {
+            inline_keyboard: [
+              [
+                {
+                  text: '✅ Tasdiqlash',
+                  callback_data: `confirm_premiere_${contentType}_${codeNumber}`,
+                },
+                { text: '❌ Bekor qilish', callback_data: 'cancel_premiere' },
+              ],
+            ],
+          },
+        });
+      } else {
+        await ctx.reply(
+          '📤 Quyidagi xabar barcha foydalanuvchilarga yuboriladi:\n\n' +
+            caption,
+          {
+            reply_markup: {
+              inline_keyboard: [
+                [
+                  {
+                    text: '✅ Tasdiqlash',
+                    callback_data: `confirm_premiere_${contentType}_${codeNumber}`,
+                  },
+                  { text: '❌ Bekor qilish', callback_data: 'cancel_premiere' },
+                ],
+              ],
+            },
+          },
+        );
+      }
+
+      // Save data to session for confirmation
+      this.sessionService.updateSession(ctx.from.id, {
+        state: AdminState.BROADCAST_PREMIERE,
+        data: {
+          contentType,
+          code: codeNumber,
+          caption,
+          poster: content.poster,
+          userCount: users.length,
+        },
+      });
+    } catch (error) {
+      this.logger.error('Error handling premiere broadcast steps:', error);
+      await ctx.reply("❌ Xatolik yuz berdi. Qaytadan urinib ko'ring.");
+      this.sessionService.clearSession(ctx.from.id);
+    }
+  }
+
+  private async confirmPremiereBroadcast(ctx: any) {
+    try {
+      await ctx.answerCallbackQuery('📤 Yuborilmoqda...');
+
+      // Get session data
+      const session = this.sessionService.getSession(ctx.from.id);
+      if (!session || !session.data) {
+        await ctx.reply("❌ Ma'lumot topilmadi. Qaytadan urinib ko'ring.");
+        return;
+      }
+
+      const { caption, poster, contentType, code } = session.data;
+
+      // Get all active users
+      const users = await this.prisma.user.findMany({
+        where: { isBlocked: false },
+      });
+
+      // Send to all users
+      let successCount = 0;
+      let failCount = 0;
+
+      await ctx.editMessageReplyMarkup({ inline_keyboard: [] });
+      const statusMsg = await ctx.reply(
+        `📤 Yuborish boshlandi...\n\n👥 Jami: ${users.length}\n✅ Yuborildi: 0\n❌ Xatolik: 0`,
+      );
+
+      for (const user of users) {
+        try {
+          // Create deep link button
+          const deepLink = `https://t.me/${ctx.me.username}?start=${contentType}_${code}`;
+          const keyboard = {
+            inline_keyboard: [[{ text: '▶️ Tomosha qilish', url: deepLink }]],
+          };
+
+          if (poster) {
+            await ctx.api.sendPhoto(user.telegramId, poster, {
+              caption,
+              reply_markup: keyboard,
+            });
+          } else {
+            await ctx.api.sendMessage(user.telegramId, caption, {
+              reply_markup: keyboard,
+            });
+          }
+
+          successCount++;
+
+          // Update status every 10 users
+          if (successCount % 10 === 0) {
+            await ctx.api.editMessageText(
+              ctx.chat.id,
+              statusMsg.message_id,
+              `📤 Yuborilmoqda...\n\n👥 Jami: ${users.length}\n✅ Yuborildi: ${successCount}\n❌ Xatolik: ${failCount}`,
+            );
+          }
+
+          // Sleep to avoid rate limits (30 messages per second max)
+          await new Promise((resolve) => setTimeout(resolve, 35));
+        } catch (error) {
+          failCount++;
+          this.logger.error(`Error sending to user ${user.telegramId}:`, error);
+        }
+      }
+
+      // Final status
+      await ctx.api.editMessageText(
+        ctx.chat.id,
+        statusMsg.message_id,
+        `✅ Yuborish tugadi!\n\n👥 Jami: ${users.length}\n✅ Yuborildi: ${successCount}\n❌ Xatolik: ${failCount}`,
+      );
+
+      // Clear session
+      this.sessionService.clearSession(ctx.from.id);
+
+      const admin = await this.adminService.getAdminByTelegramId(ctx.from.id);
+      await ctx.reply(
+        "✅ Premyera e'loni yuborildi!",
+        AdminKeyboard.getAdminMainMenu(admin?.role || 'ADMIN'),
+      );
+    } catch (error) {
+      this.logger.error('Error confirming premiere broadcast:', error);
+      await ctx.reply('❌ Xatolik yuz berdi.');
+      this.sessionService.clearSession(ctx.from.id);
+    }
+  }
+
+  private async startTelegramPremiumBroadcast(ctx: any) {
+    try {
+      const admin = await this.adminService.getAdminByTelegramId(ctx.from.id);
+      if (!admin) {
+        await ctx.reply('⛔️ Admin topilmadi.');
+        return;
+      }
+
+      // Get count of Telegram Premium users
+      const premiumUserCount = await this.prisma.user.count({
+        where: {
+          hasTelegramPremium: true,
+          isBlocked: false,
+        },
+      });
+
+      // Start session
+      this.sessionService.startSession(
+        ctx.from.id,
+        AdminState.BROADCAST_TELEGRAM_PREMIUM,
+      );
+      this.sessionService.updateSessionData(ctx.from.id, {});
+
+      await ctx.reply(
+        `⭐️ Telegram Premium foydalanuvchilarga xabar yuborish\n\n` +
+          `👥 Telegram Premium foydalanuvchilar soni: ${premiumUserCount}\n\n` +
+          `📝 Yubormoqchi bo'lgan xabaringizni kiriting:`,
+        {
+          reply_markup: {
+            keyboard: [[{ text: '❌ Bekor qilish' }]],
+            resize_keyboard: true,
+          },
+        },
+      );
+    } catch (error) {
+      this.logger.error('Error starting Telegram Premium broadcast:', error);
+      await ctx.reply('❌ Xatolik yuz berdi.');
+    }
+  }
+
+  private async handleTelegramPremiumBroadcastSteps(
+    ctx: any,
+    text: string,
+    session: any,
+  ) {
+    try {
+      // Check for cancel
+      if (text === '❌ Bekor qilish') {
+        this.sessionService.clearSession(ctx.from.id);
+        const admin = await this.adminService.getAdminByTelegramId(ctx.from.id);
+        await ctx.reply(
+          '❌ Bekor qilindi',
+          AdminKeyboard.getAdminMainMenu(admin?.role || 'ADMIN'),
+        );
+        return;
+      }
+
+      // Get message text
+      const message = text;
+
+      // Get all Telegram Premium users
+      const telegramPremiumUsers = await this.prisma.user.findMany({
+        where: {
+          hasTelegramPremium: true,
+          isBlocked: false,
+        },
+      });
+
+      // Show confirmation
+      await ctx.reply(
+        `📤 Quyidagi xabar barcha Telegram Premium foydalanuvchilarga yuboriladi:\n\n` +
+          `━━━━━━━━━━━━━━━━━━\n${message}\n━━━━━━━━━━━━━━━━━━\n\n` +
+          `👥 Qabul qiluvchilar: ${telegramPremiumUsers.length} ta\n\n` +
+          `Tasdiqlaysizmi?`,
+        {
+          reply_markup: {
+            inline_keyboard: [
+              [
+                {
+                  text: '✅ Tasdiqlash',
+                  callback_data: 'confirm_telegram_premium_broadcast',
+                },
+                {
+                  text: '❌ Bekor qilish',
+                  callback_data: 'cancel_telegram_premium_broadcast',
+                },
+              ],
+            ],
+          },
+        },
+      );
+
+      // Save message to session
+      this.sessionService.updateSession(ctx.from.id, {
+        state: AdminState.BROADCAST_TELEGRAM_PREMIUM,
+        data: {
+          message,
+          userCount: telegramPremiumUsers.length,
+        },
+      });
+    } catch (error) {
+      this.logger.error(
+        'Error handling Telegram Premium broadcast steps:',
+        error,
+      );
+      await ctx.reply("❌ Xatolik yuz berdi. Qaytadan urinib ko'ring.");
+      this.sessionService.clearSession(ctx.from.id);
+    }
+  }
+
+  private async confirmTelegramPremiumBroadcast(ctx: any) {
+    try {
+      await ctx.answerCallbackQuery('📤 Yuborilmoqda...');
+
+      // Get session data
+      const session = this.sessionService.getSession(ctx.from.id);
+      if (!session || !session.data) {
+        await ctx.reply("❌ Ma'lumot topilmadi. Qaytadan urinib ko'ring.");
+        return;
+      }
+
+      const { message } = session.data;
+
+      // Get all Telegram Premium users
+      const telegramPremiumUsers = await this.prisma.user.findMany({
+        where: {
+          hasTelegramPremium: true,
+          isBlocked: false,
+        },
+      });
+
+      // Send to all Telegram Premium users
+      let successCount = 0;
+      let failCount = 0;
+
+      await ctx.editMessageReplyMarkup({ inline_keyboard: [] });
+      const statusMsg = await ctx.reply(
+        `📤 Yuborish boshlandi...\n\n👥 Jami: ${telegramPremiumUsers.length}\n✅ Yuborildi: 0\n❌ Xatolik: 0`,
+      );
+
+      for (const user of telegramPremiumUsers) {
+        try {
+          await ctx.api.sendMessage(user.telegramId, message, {
+            parse_mode: 'HTML',
+          });
+
+          successCount++;
+
+          // Update status every 10 users
+          if (successCount % 10 === 0) {
+            await ctx.api.editMessageText(
+              ctx.chat.id,
+              statusMsg.message_id,
+              `📤 Yuborilmoqda...\n\n👥 Jami: ${telegramPremiumUsers.length}\n✅ Yuborildi: ${successCount}\n❌ Xatolik: ${failCount}`,
+            );
+          }
+
+          // Sleep to avoid rate limits
+          await new Promise((resolve) => setTimeout(resolve, 35));
+        } catch (error) {
+          failCount++;
+          this.logger.error(`Error sending to user ${user.telegramId}:`, error);
+        }
+      }
+
+      // Final status
+      await ctx.api.editMessageText(
+        ctx.chat.id,
+        statusMsg.message_id,
+        `✅ Yuborish tugadi!\n\n👥 Jami: ${telegramPremiumUsers.length}\n✅ Yuborildi: ${successCount}\n❌ Xatolik: ${failCount}`,
+      );
+
+      // Clear session
+      this.sessionService.clearSession(ctx.from.id);
+
+      const admin = await this.adminService.getAdminByTelegramId(ctx.from.id);
+      await ctx.reply(
+        '✅ Xabar Telegram Premium foydalanuvchilarga yuborildi!',
+        AdminKeyboard.getAdminMainMenu(admin?.role || 'ADMIN'),
+      );
+    } catch (error) {
+      this.logger.error('Error confirming Telegram Premium broadcast:', error);
+      await ctx.reply('❌ Xatolik yuz berdi.');
+      this.sessionService.clearSession(ctx.from.id);
+    }
+  }
+
+  private async showAllUsers(ctx: BotContext) {
+    try {
+      const admin = await this.getAdmin(ctx);
+      if (!admin) return;
+
+      // Get all users with pagination
+      const users = await this.prisma.user.findMany({
+        take: 50, // Show first 50 users
+        orderBy: { createdAt: 'desc' },
+      });
+
+      if (users.length === 0) {
+        await ctx.reply('❌ Foydalanuvchilar topilmadi.');
+        return;
+      }
+
+      let message = '👥 **Barcha foydalanuvchilar** (50 ta):\n\n';
+
+      users.forEach((user, index) => {
+        const status = user.isBlocked ? '🚫' : user.isPremium ? '💎' : '👤';
+        const username = user.username ? `@${user.username}` : "Username yo'q";
+        const name = user.firstName || "Ism yo'q";
+
+        message += `${index + 1}. ${status} ${name} (${username})\n`;
+        message += `   ID: \`${user.telegramId}\`\n`;
+        if (user.hasTelegramPremium) message += `   ⭐️ Telegram Premium\n`;
+        message += `\n`;
+      });
+
+      await ctx.reply(message, { parse_mode: 'Markdown' });
+    } catch (error) {
+      this.logger.error('Error showing all users:', error);
+      await ctx.reply('❌ Xatolik yuz berdi.');
+    }
+  }
+
+  private async startBlockUser(ctx: BotContext) {
+    try {
+      const admin = await this.getAdmin(ctx);
+      if (!admin) return;
+
+      // Start session
+      this.sessionService.startSession(ctx.from!.id, AdminState.BLOCK_USER);
+      this.sessionService.updateSessionData(ctx.from!.id, {});
+
+      await ctx.reply(
+        '🚫 **Foydalanuvchini bloklash**\n\n' +
+          "Bloklash uchun foydalanuvchining username'ini kiriting:\n" +
+          '(@ belgisi bilan yoki belgisisiz)\n\n' +
+          'Masalan: @username yoki username',
+        {
+          parse_mode: 'Markdown',
+          reply_markup: {
+            keyboard: [[{ text: '❌ Bekor qilish' }]],
+            resize_keyboard: true,
+          },
+        },
+      );
+    } catch (error) {
+      this.logger.error('Error starting block user:', error);
+      await ctx.reply('❌ Xatolik yuz berdi.');
+    }
+  }
+
+  private async handleBlockUserSteps(ctx: any, text: string, session: any) {
+    try {
+      // Check for cancel
+      if (text === '❌ Bekor qilish') {
+        this.sessionService.clearSession(ctx.from.id);
+        const admin = await this.adminService.getAdminByTelegramId(ctx.from.id);
+        await ctx.reply(
+          '❌ Bekor qilindi',
+          AdminKeyboard.getAdminMainMenu(admin?.role || 'ADMIN'),
+        );
+        return;
+      }
+
+      // Parse username (remove @ if exists)
+      const username = text.startsWith('@') ? text.substring(1) : text;
+
+      // Find user by username
+      const user = await this.prisma.user.findFirst({
+        where: { username: username },
+      });
+
+      if (!user) {
+        await ctx.reply(
+          '❌ Foydalanuvchi topilmadi!\n\n' +
+            "Iltimos, to'g'ri username kiriting:",
+        );
+        return;
+      }
+
+      // Check if already blocked
+      if (user.isBlocked) {
+        await ctx.reply(
+          `⚠️ Bu foydalanuvchi allaqachon bloklangan!\n\n` +
+            `👤 Ism: ${user.firstName || "Noma'lum"}\n` +
+            `📝 Username: @${user.username}\n` +
+            `🚫 Bloklangan sana: ${user.blockedAt?.toLocaleString('uz-UZ') || "Noma'lum"}`,
+        );
+        this.sessionService.clearSession(ctx.from.id);
+        return;
+      }
+
+      // Show confirmation
+      await ctx.reply(
+        `⚠️ **Tasdiqlash**\n\n` +
+          `Haqiqatdan ham quyidagi foydalanuvchini bloklaysizmi?\n\n` +
+          `👤 Ism: ${user.firstName || "Noma'lum"}\n` +
+          `📝 Username: @${user.username}\n` +
+          `🆔 Telegram ID: \`${user.telegramId}\`\n` +
+          `📅 Ro'yxatdan o'tgan: ${user.createdAt.toLocaleString('uz-UZ')}\n\n` +
+          `Bu foydalanuvchi botdan qaytib foydalana olmaydi!`,
+        {
+          parse_mode: 'Markdown',
+          reply_markup: {
+            inline_keyboard: [
+              [
+                {
+                  text: '✅ Ha, bloklash',
+                  callback_data: `confirm_block_user_${user.id}`,
+                },
+                {
+                  text: "❌ Yo'q",
+                  callback_data: 'cancel_block_user',
+                },
+              ],
+            ],
+          },
+        },
+      );
+
+      // Save user ID to session
+      this.sessionService.updateSession(ctx.from.id, {
+        state: AdminState.BLOCK_USER,
+        data: { userId: user.id, username: user.username },
+      });
+    } catch (error) {
+      this.logger.error('Error handling block user steps:', error);
+      await ctx.reply("❌ Xatolik yuz berdi. Qaytadan urinib ko'ring.");
+      this.sessionService.clearSession(ctx.from.id);
+    }
+  }
+
+  private async confirmBlockUser(ctx: any) {
+    try {
+      await ctx.answerCallbackQuery();
+
+      // Get session data
+      const session = this.sessionService.getSession(ctx.from.id);
+      if (!session || !session.data || !session.data.userId) {
+        await ctx.reply("❌ Ma'lumot topilmadi. Qaytadan urinib ko'ring.");
+        return;
+      }
+
+      const { userId, username } = session.data;
+
+      // Block user
+      const user = await this.prisma.user.update({
+        where: { id: userId },
+        data: {
+          isBlocked: true,
+          blockedAt: new Date(),
+          blockReason: `Admin tomonidan bloklangan: ${ctx.from.username || ctx.from.id}`,
+        },
+      });
+
+      // Clear session
+      this.sessionService.clearSession(ctx.from.id);
+
+      // Edit message to remove buttons
+      await ctx.editMessageReplyMarkup({ inline_keyboard: [] });
+
+      const admin = await this.adminService.getAdminByTelegramId(ctx.from.id);
+      await ctx.reply(
+        `✅ Foydalanuvchi bloklandi!\n\n` +
+          `👤 Ism: ${user.firstName || "Noma'lum"}\n` +
+          `📝 Username: @${username}\n` +
+          `🚫 Bloklangan sana: ${new Date().toLocaleString('uz-UZ')}`,
+        AdminKeyboard.getAdminMainMenu(admin?.role || 'ADMIN'),
+      );
+    } catch (error) {
+      this.logger.error('Error confirming block user:', error);
+      await ctx.reply('❌ Xatolik yuz berdi.');
       this.sessionService.clearSession(ctx.from.id);
     }
   }

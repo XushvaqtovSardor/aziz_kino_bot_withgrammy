@@ -57,6 +57,7 @@ model User {
   isPremium          Boolean        @default(false)
   premiumTill        DateTime?
   premiumExpiresAt   DateTime?
+  hasTelegramPremium Boolean        @default(false)
   isBlocked          Boolean        @default(false)
   blockedAt          DateTime?
   blockReason        String?
@@ -69,6 +70,7 @@ model User {
   
   @@index([telegramId])
   @@index([isPremium])
+  @@index([hasTelegramPremium])
 }
 
 
@@ -106,6 +108,7 @@ model DatabaseChannel {
   id          Int      @id @default(autoincrement())
   channelId   String   @unique
   channelName String
+  channelLink String?
   isActive    Boolean  @default(true)
   fields      Field[]
   

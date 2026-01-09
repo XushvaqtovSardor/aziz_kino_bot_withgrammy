@@ -122,12 +122,14 @@ export class ChannelService {
   async createDatabaseChannel(data: {
     channelId: string;
     channelName: string;
+    channelLink?: string;
     isActive?: boolean;
   }) {
     return this.prisma.databaseChannel.create({
       data: {
         channelId: data.channelId,
         channelName: data.channelName,
+        channelLink: data.channelLink,
         isActive: data.isActive ?? true,
       },
     });

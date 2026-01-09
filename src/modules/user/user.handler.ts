@@ -8,11 +8,14 @@ import { EpisodeService } from '../content/services/episode.service';
 import { MovieEpisodeService } from '../content/services/movie-episode.service';
 import { ChannelService } from '../channel/services/channel.service';
 import { PremiumService } from '../payment/services/premium.service';
+import { PaymentService } from '../payment/services/payment.service';
 import { WatchHistoryService } from '../content/services/watch-history.service';
 import { LanguageService } from '../language/language.service';
 import { FieldService } from '../field/services/field.service';
 import { SettingsService } from '../settings/services/settings.service';
+import { AdminService } from '../admin/services/admin.service';
 import { GrammyBotService } from '../../common/grammy/grammy-bot.module';
+import { PrismaService } from '../../prisma/prisma.service';
 import { MainMenuKeyboard } from './keyboards/main-menu.keyboard';
 
 @Injectable()
@@ -27,11 +30,14 @@ export class UserHandler implements OnModuleInit {
     private movieEpisodeService: MovieEpisodeService,
     private channelService: ChannelService,
     private premiumService: PremiumService,
+    private paymentService: PaymentService,
     private watchHistoryService: WatchHistoryService,
     private languageService: LanguageService,
     private fieldService: FieldService,
     private settingsService: SettingsService,
+    private adminService: AdminService,
     private grammyBot: GrammyBotService,
+    private prisma: PrismaService,
   ) {}
 
   onModuleInit() {
@@ -75,6 +81,7 @@ export class UserHandler implements OnModuleInit {
       /^buy_premium_(\d+)$/,
       this.handlePremiumPurchase.bind(this),
     );
+    bot.callbackQuery(/^upload_receipt$/, this.handleUploadReceipt.bind(this));
     bot.callbackQuery(/^share_movie_(\d+)$/, this.handleShareMovie.bind(this));
     bot.callbackQuery(
       /^share_serial_(\d+)$/,
@@ -86,6 +93,9 @@ export class UserHandler implements OnModuleInit {
 
     // Handle chat join requests (for private channels)
     bot.on('chat_join_request', this.handleJoinRequest.bind(this));
+
+    // Handle photo messages (for receipt upload)
+    bot.on('message:photo', this.handlePhotoMessage.bind(this));
 
     // NOTE: message:text is handled by admin.handler.ts middleware first
     // If admin has no session, it calls next() which then triggers bot.use()
@@ -107,6 +117,9 @@ export class UserHandler implements OnModuleInit {
     const payload = ctx.match;
     this.logger.log(`User ${ctx.from.id} started bot with payload: ${payload}`);
 
+    // Check Telegram Premium status
+    const hasTelegramPremium = ctx.from.is_premium || false;
+
     // Check or create user
     const user = await this.userService.findOrCreate(String(ctx.from.id), {
       firstName: ctx.from.first_name || '',
@@ -115,12 +128,35 @@ export class UserHandler implements OnModuleInit {
       languageCode: ctx.from.language_code || 'uz',
     });
 
+    // Check if user is blocked
+    if (user.isBlocked) {
+      await ctx.reply(
+        '🚫 Siz botdan foydalanish huquqidan mahrum etilgansiz.\n\n' +
+          `Sabab: ${user.blockReason || 'Admin tomonidan bloklangan'}\n` +
+          `Sana: ${user.blockedAt?.toLocaleString('uz-UZ') || "Noma'lum"}`,
+      );
+      return;
+    }
+
+    // Update Telegram Premium status in database
+    await this.prisma.user.update({
+      where: { id: user.id },
+      data: { hasTelegramPremium },
+    });
+
     // Check premium status
     const premiumStatus = await this.premiumService.checkPremiumStatus(user.id);
     const isPremium = premiumStatus.isPremium && !premiumStatus.isExpired;
 
+    // Check if user is admin/manager/superadmin
+    const admin = await this.adminService.getAdminByTelegramId(
+      String(ctx.from.id),
+    );
+    const isAdmin = !!admin; // If admin exists, skip channel check
+
     // Check mandatory channels subscription FIRST (for all users, new and old)
-    if (!isPremium) {
+    // Skip check for admins, managers, and superadmins
+    if (!isPremium && !isAdmin) {
       const hasSubscription = await this.checkSubscription(ctx, 0, 'start');
       if (!hasSubscription) return; // Will show mandatory channels
     }
@@ -410,6 +446,132 @@ To'lov qilgandan keyin chekni botga yuboring.
       parse_mode: 'Markdown',
       reply_markup: keyboard,
     });
+
+    // Store payment info for this user
+    this.waitingForReceipt.set(ctx.from.id, {
+      amount: price,
+      duration,
+      months,
+    });
+  }
+
+  private async handleUploadReceipt(ctx: BotContext) {
+    if (!ctx.callbackQuery || !ctx.from) return;
+
+    await ctx.answerCallbackQuery();
+
+    await ctx.reply(
+      '📸 **Chekni yuborish**\n\n' +
+        "To'lov chekini rasm sifatida yuboring.\n\n" +
+        "💡 Chek aniq va tushunarli bo'lishi kerak.",
+      { parse_mode: 'Markdown' },
+    );
+  }
+
+  private async handlePhotoMessage(ctx: BotContext) {
+    if (!ctx.from || !ctx.message || !('photo' in ctx.message)) return;
+
+    const userId = ctx.from.id;
+
+    // Check if user is waiting to upload receipt
+    const paymentInfo = this.waitingForReceipt.get(userId);
+
+    if (!paymentInfo) {
+      // User is not in receipt upload mode
+      return;
+    }
+
+    try {
+      const photo = ctx.message.photo[ctx.message.photo.length - 1];
+      const fileId = photo.file_id;
+
+      this.logger.log(`User ${userId} uploaded receipt: ${fileId}`);
+
+      // Get user from database
+      const user = await this.userService.findByTelegramId(String(userId));
+      if (!user) {
+        await ctx.reply('❌ Foydalanuvchi topilmadi.');
+        return;
+      }
+
+      // Create payment record
+      const payment = await this.paymentService.create(
+        user.id,
+        paymentInfo.amount,
+        fileId,
+        paymentInfo.duration,
+      );
+
+      // Remove from waiting list
+      this.waitingForReceipt.delete(userId);
+
+      // Send confirmation to user
+      await ctx.reply(
+        '✅ **Chek qabul qilindi!**\n\n' +
+          `📝 To'lov ID: ${payment.id}\n` +
+          `💰 Summa: ${paymentInfo.amount.toLocaleString()} UZS\n` +
+          `⏱ Muddati: ${paymentInfo.months} oy\n\n` +
+          "⏳ Chekingiz ko'rib chiqilmoqda. Tez orada javob beramiz!",
+        { parse_mode: 'Markdown' },
+      );
+
+      // Send notification to admins
+      await this.notifyAdminsNewPayment(payment, user, paymentInfo);
+    } catch (error) {
+      this.logger.error('Error processing receipt:', error);
+      await ctx.reply(
+        "❌ Chekni qayta ishlashda xatolik yuz berdi. Iltimos qayta urinib ko'ring.",
+      );
+    }
+  }
+
+  private async notifyAdminsNewPayment(
+    payment: any,
+    user: any,
+    paymentInfo: { amount: number; duration: number; months: number },
+  ) {
+    try {
+      // Get all admins from database
+      const admins = await this.adminService.findAll();
+
+      const message = `
+🔔 **Yangi to'lov!**
+
+👤 Foydalanuvchi: ${user.firstName}${user.lastName ? ' ' + user.lastName : ''}
+🆔 Telegram ID: ${user.telegramId}
+📝 Username: @${user.username || "yo'q"}
+
+💰 Summa: ${paymentInfo.amount.toLocaleString()} UZS
+⏱ Muddati: ${paymentInfo.months} oy (${paymentInfo.duration} kun)
+🆔 Payment ID: ${payment.id}
+      `.trim();
+
+      const keyboard = new InlineKeyboard()
+        .text('✅ Tasdiqlash', `approve_payment_${payment.id}`)
+        .text('❌ Rad etish', `reject_payment_${payment.id}`);
+
+      for (const admin of admins) {
+        try {
+          // Send receipt photo to admin
+          await this.grammyBot.bot.api.sendPhoto(
+            admin.telegramId,
+            payment.receiptFileId,
+            {
+              caption: message,
+              parse_mode: 'Markdown',
+              reply_markup: keyboard,
+            },
+          );
+        } catch (error) {
+          this.logger.error(
+            `Failed to notify admin ${admin.telegramId}:`,
+            error,
+          );
+        }
+      }
+    } catch (error) {
+      this.logger.error('Error notifying admins:', error);
+    }
   }
 
   private generatePaymeUrl(
@@ -589,10 +751,14 @@ Savollaringiz bo'lsa murojaat qiling:
         const movieDeepLink = `https://t.me/${botUsername}?start=${movie.code}`;
 
         const caption = `
-🎬 **${movie.title}**
-${movie.genre ? `🎭 Janr: ${movie.genre}\n` : ''}${movie.description ? `\n📝 ${movie.description}\n` : ''}
-📊 Jami qismlar: ${episodes.length}
-🆔 Kod: ${movie.code}
+╭────────────────────
+├‣  Kino nomi : ${movie.title}
+├‣  Kino kodi: ${movie.code}
+├‣  Qism: ${episodes.length}
+├‣  Janrlari: ${movie.genre || "Noma'lum"}
+├‣  Kanal: ${field?.channelLink || '@' + (field?.name || 'Kanal')}
+╰────────────────────
+▶️ Kinoning to'liq qismini @${botUsername} dan tomosha qilishingiz mumkin!
         `.trim();
 
         // Create keyboard with episode numbers
@@ -612,7 +778,6 @@ ${movie.genre ? `🎭 Janr: ${movie.genre}\n` : ''}${movie.description ? `\n📝
         // Send poster with episodes
         await ctx.replyWithPhoto(movie.posterFileId, {
           caption,
-          parse_mode: 'Markdown',
           reply_markup: keyboard,
         });
 
@@ -683,12 +848,17 @@ ${movie.genre ? `🎭 Janr: ${movie.genre}\n` : ''}${movie.description ? `\n📝
 
       const botUsername = (await ctx.api.getMe()).username;
       const serialDeepLink = `https://t.me/${botUsername}?start=s${code}`;
+      const field = await this.fieldService.findOne(serial.fieldId);
 
       const caption = `
-📺 **${serial.title}**
-${serial.genre ? `🎭 Janr: ${serial.genre}\n` : ''}${serial.description ? `\n📝 ${serial.description}\n` : ''}
-📊 Jami qismlar: ${episodes.length}
-🆔 Kod: ${serial.code}
+╭────────────────────
+├‣  Serial nomi : ${serial.title}
+├‣  Serial kodi: s${serial.code}
+├‣  Qism: ${episodes.length}
+├‣  Janrlari: ${serial.genre || "Noma'lum"}
+├‣  Kanal: ${field?.channelLink || '@' + (field?.name || 'Kanal')}
+╰────────────────────
+▶️ Serialning to'liq qismini @${botUsername} dan tomosha qilishingiz mumkin!
       `.trim();
 
       // Create keyboard with episode numbers
@@ -750,7 +920,7 @@ ${serial.genre ? `🎭 Janr: ${serial.genre}\n` : ''}${serial.description ? `\n�
     for (const subscribed of status.subscribedChannels) {
       if (subscribed.isSubscribed) {
         await this.channelService.incrementMemberCount(subscribed.id);
-        
+
         // Decrement pending requests for private channels
         if (subscribed.type === 'PRIVATE' && subscribed.hasPendingRequest) {
           await this.channelService.decrementPendingRequests(subscribed.id);
@@ -768,22 +938,29 @@ ${serial.genre ? `🎭 Janr: ${serial.genre}\n` : ''}${serial.description ? `\n�
 
     // Show ALL unsubscribed channels at once
     let message = `❌ Botdan foydalanish uchun quyidagi kanallarga obuna bo'lishingiz yoki so'rov yuborishingiz kerak:\n\n`;
-    
+
     // Count telegram and external channels
-    const telegramChannels = status.unsubscribedChannels.filter((ch) => !ch.isExternal);
-    const externalChannels = status.unsubscribedChannels.filter((ch) => ch.isExternal);
-    
+    const telegramChannels = status.unsubscribedChannels.filter(
+      (ch) => !ch.isExternal,
+    );
+    const externalChannels = status.unsubscribedChannels.filter(
+      (ch) => ch.isExternal,
+    );
+
     if (telegramChannels.length > 0) {
       message += `📱 <b>Telegram kanallar</b> (${telegramChannels.length}):\n`;
       telegramChannels.forEach((channel, index) => {
-        const channelTypeEmoji = 
-          channel.type === 'PUBLIC' ? '🔓' :
-          channel.type === 'PRIVATE' ? '🔐' : '🔒';
+        const channelTypeEmoji =
+          channel.type === 'PUBLIC'
+            ? '🔓'
+            : channel.type === 'PRIVATE'
+              ? '🔐'
+              : '🔒';
         message += `${index + 1}. ${channelTypeEmoji} ${channel.channelName}\n`;
       });
       message += '\n';
     }
-    
+
     if (externalChannels.length > 0) {
       message += `🌐 <b>Tashqi sahifalar</b> (${externalChannels.length}):\n`;
       externalChannels.forEach((channel, index) => {
@@ -791,7 +968,7 @@ ${serial.genre ? `🎭 Janr: ${serial.genre}\n` : ''}${serial.description ? `\n�
       });
       message += '\n';
     }
-    
+
     message += `✅ Telegram kanallariga obuna bo'ling yoki qo'shilish so'rovini yuboring.\n`;
     message += `🌐 Tashqi sahifalarga obuna bo'lishingiz tavsiya etiladi (majburiy emas).\n\n`;
     message += `<blockquote>💎 Premium obuna sotib olib, kanallarga obuna bo'lmasdan foydalanishingiz mumkin.</blockquote>`;
@@ -801,7 +978,9 @@ ${serial.genre ? `🎭 Janr: ${serial.genre}\n` : ''}${serial.description ? `\n�
     // Add all channel buttons
     status.unsubscribedChannels.forEach((channel) => {
       const emoji = channel.isExternal ? '🌐' : '📱';
-      keyboard.url(`${emoji} ${channel.channelName}`, channel.channelLink).row();
+      keyboard
+        .url(`${emoji} ${channel.channelName}`, channel.channelLink)
+        .row();
     });
 
     keyboard.text('✅ Tekshirish', 'check_subscription').row();
@@ -819,8 +998,6 @@ ${serial.genre ? `🎭 Janr: ${serial.genre}\n` : ''}${serial.description ? `\n�
 
     return false;
   }
-
-
 
   private async handleCheckSubscription(ctx: BotContext) {
     if (!ctx.callbackQuery || !ctx.from) return;
@@ -925,7 +1102,7 @@ ${serial.genre ? `🎭 Janr: ${serial.genre}\n` : ''}${serial.description ? `\n�
 
     // Add all unsubscribed channel buttons
     status.unsubscribedChannels.forEach((channel) => {
-      const emoji = channel.isExternal ? '🌐' : '📱';
+      const emoji = channel.type === 'EXTERNAL' ? '🌐' : '📱';
       keyboard
         .url(`${emoji} ${channel.channelName}`, channel.channelLink)
         .row();
@@ -951,6 +1128,12 @@ ${serial.genre ? `🎭 Janr: ${serial.genre}\n` : ''}${serial.description ? `\n�
   // ==================== JOIN REQUEST HANDLER ====================
   // Store join requests in memory to prevent duplicates
   private joinRequestCache = new Map<string, number>();
+
+  // Store users waiting to upload receipt
+  private waitingForReceipt = new Map<
+    number,
+    { amount: number; duration: number; months: number }
+  >();
 
   private async handleJoinRequest(ctx: BotContext) {
     if (!ctx.chatJoinRequest) return;
@@ -1038,6 +1221,7 @@ ${serial.genre ? `🎭 Janr: ${serial.genre}\n` : ''}${serial.description ? `\n�
       // Send episode video with share button
       const serial = await this.serialService.findById(serialId);
       const botUsername = (await ctx.api.getMe()).username;
+      const field = await this.fieldService.findOne(serial.fieldId);
       const shareLink = `https://t.me/share/url?url=https://t.me/${botUsername}?start=s${serial.code}&text=📺 ${encodeURIComponent(serial.title)}\n\n📊 Qismlar: ${serial.totalEpisodes}\n📖 Kod: ${serial.code}\n\n👇 Serialni tomosha qilish uchun bosing:`;
       const serialDeepLink = `https://t.me/${botUsername}?start=s${serial.code}`;
 
@@ -1046,9 +1230,20 @@ ${serial.genre ? `🎭 Janr: ${serial.genre}\n` : ''}${serial.description ? `\n�
         .row()
         .url('📤 Share qilish', shareLink);
 
+      const videoCaption = `
+╭────────────────────
+├‣  Serial nomi : ${serial.title}
+├‣  Serial kodi: s${serial.code}
+├‣  Qism: ${episodeNumber}
+├‣  Janrlari: ${serial.genre || "Noma'lum"}
+├‣  Kanal: ${field?.channelLink || '@' + (field?.name || 'Kanal')}
+╰────────────────────
+▶️ Serialning to'liq qismini @${botUsername} dan tomosha qilishingiz mumkin!
+      `.trim();
+
       if (episode.videoFileId) {
         await ctx.replyWithVideo(episode.videoFileId, {
-          caption: `📺 ${episode.title || `Qism ${episode.episodeNumber}`}`,
+          caption: videoCaption,
           protect_content: true,
           reply_markup: shareKeyboard,
         });
@@ -1109,6 +1304,7 @@ ${serial.genre ? `🎭 Janr: ${serial.genre}\n` : ''}${serial.description ? `\n�
       // Send episode video with share button
       const movie = await this.movieService.findById(movieId);
       const botUsername = (await ctx.api.getMe()).username;
+      const field = await this.fieldService.findOne(movie.fieldId);
       const shareLink = `https://t.me/share/url?url=https://t.me/${botUsername}?start=${movie.code}&text=🎬 ${encodeURIComponent(movie.title)}\n\n📊 Qismlar: ${movie.totalEpisodes}\n📖 Kod: ${movie.code}\n\n👇 Kinoni tomosha qilish uchun bosing:`;
       const movieDeepLink = `https://t.me/${botUsername}?start=${movie.code}`;
 
@@ -1117,9 +1313,20 @@ ${serial.genre ? `🎭 Janr: ${serial.genre}\n` : ''}${serial.description ? `\n�
         .row()
         .url('📤 Share qilish', shareLink);
 
+      const videoCaption = `
+╭────────────────────
+├‣  Kino nomi : ${movie.title}
+├‣  Kino kodi: ${movie.code}
+├‣  Qism: ${episodeNumber}
+├‣  Janrlari: ${movie.genre || "Noma'lum"}
+├‣  Kanal: ${field?.channelLink || '@' + (field?.name || 'Kanal')}
+╰────────────────────
+▶️ Kinoning to'liq qismini @${botUsername} dan tomosha qilishingiz mumkin!
+      `.trim();
+
       if (episode.videoFileId) {
         await ctx.replyWithVideo(episode.videoFileId, {
-          caption: `🎬 ${episode.title || `Qism ${episode.episodeNumber}`}`,
+          caption: videoCaption,
           protect_content: true,
           reply_markup: shareKeyboard,
         });
