@@ -411,8 +411,8 @@ export class SerialManagementService {
       );
     } else if (serial) {
       // Handle serial episodes
-      const episodes = await this.episodeService.findBySerialId(serial.id);
-      const nextEpisodeNumber = episodes.length + 1;
+      // Use serial.totalEpisodes to determine next episode number
+      const nextEpisodeNumber = serial.totalEpisodes + 1;
 
       this.sessionService.updateSessionData(ctx.from.id, {
         contentType: 'serial',
@@ -425,7 +425,7 @@ export class SerialManagementService {
       await ctx.reply(
         `📺 Serial topildi!\n\n` +
           `🏷 ${serial.title}\n` +
-          `📹 Mavjud qismlar: ${episodes.length}\n\n` +
+          `📹 Mavjud qismlar: ${serial.totalEpisodes}\n\n` +
           `📹 ${nextEpisodeNumber}-qism videosini yuboring:`,
         AdminKeyboard.getCancelButton(),
       );
@@ -515,8 +515,9 @@ export class SerialManagementService {
         const allEpisodes = await this.movieEpisodeService.findByMovieId(
           movie.id,
         );
+        // Movie totalEpisodes = 1 (original video) + additional episodes count
         await this.movieService.update(movie.id, {
-          totalEpisodes: allEpisodes.length,
+          totalEpisodes: 1 + allEpisodes.length,
         });
       } else {
         // Upload serial episodes

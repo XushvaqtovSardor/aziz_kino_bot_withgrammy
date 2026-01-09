@@ -2,14 +2,33 @@ import { Keyboard, InlineKeyboard } from 'grammy';
 import { LanguageTexts } from '../../language/interfaces/language-texts.interface';
 
 export class MainMenuKeyboard {
-  static getMainMenu(isPremium: boolean = false) {
+  static getMainMenu(
+    isPremium: boolean = false,
+    isPremiumBanned: boolean = false,
+  ) {
     const keyboard = new Keyboard().text("🔍 Kino kodi bo'yicha qidirish");
 
-    if (!isPremium) {
+    if (!isPremium && !isPremiumBanned) {
       keyboard.text('💎 Premium sotib olish');
     }
 
     keyboard.row().text('ℹ️ Bot haqida').text('📞 Aloqa');
+
+    return { reply_markup: keyboard.resized() };
+  }
+
+  static getMainMenuWithBack(
+    isPremium: boolean = false,
+    isPremiumBanned: boolean = false,
+  ) {
+    const keyboard = new Keyboard().text("🔍 Kino kodi bo'yicha qidirish");
+
+    if (!isPremium && !isPremiumBanned) {
+      keyboard.text('💎 Premium sotib olish');
+    }
+
+    keyboard.row().text('ℹ️ Bot haqida').text('📞 Aloqa');
+    keyboard.row().text('🔙 Orqaga');
 
     return { reply_markup: keyboard.resized() };
   }

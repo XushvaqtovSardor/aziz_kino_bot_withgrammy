@@ -153,7 +153,11 @@ export class AdminHandler implements OnModuleInit {
       this.withAdminCheck(this.showPendingPayments.bind(this)),
     );
     bot.hears(
-      '👥 Adminlar',
+      '� Premium banned users',
+      this.withAdminCheck(this.showPremiumBannedUsersMenu.bind(this)),
+    );
+    bot.hears(
+      '�👥 Adminlar',
       this.withAdminCheck(this.showAdminsList.bind(this)),
     );
     bot.hears(
@@ -175,6 +179,14 @@ export class AdminHandler implements OnModuleInit {
     bot.hears(
       '🚫 Foydalanuvchini bloklash',
       this.withAdminCheck(this.startBlockUser.bind(this)),
+    );
+    bot.hears(
+      "👥 Hamma userlarni ko'rish",
+      this.withAdminCheck(this.showAllPremiumBannedUsers.bind(this)),
+    );
+    bot.hears(
+      '🔍 Qidirish',
+      this.withAdminCheck(this.startSearchPremiumBannedUser.bind(this)),
     );
 
     // Callback query handlers - all with admin check
@@ -201,6 +213,21 @@ export class AdminHandler implements OnModuleInit {
     bot.callbackQuery(/^delete_db_channel_(\d+)$/, async (ctx) => {
       const admin = await this.getAdmin(ctx);
       if (admin) await this.deleteDatabaseChannel(ctx);
+    });
+
+    bot.callbackQuery(/^goto_db_channel_(.+)$/, async (ctx) => {
+      const admin = await this.getAdmin(ctx);
+      if (admin) await this.gotoDbChannel(ctx);
+    });
+
+    bot.callbackQuery('show_delete_db_channels', async (ctx) => {
+      const admin = await this.getAdmin(ctx);
+      if (admin) await this.showDeleteDatabaseChannels(ctx);
+    });
+
+    bot.callbackQuery('back_to_db_channels', async (ctx) => {
+      const admin = await this.getAdmin(ctx);
+      if (admin) await this.showDatabaseChannels(ctx);
     });
 
     bot.callbackQuery(/^approve_payment_(\d+)$/, async (ctx) => {
@@ -274,6 +301,16 @@ export class AdminHandler implements OnModuleInit {
           AdminKeyboard.getAdminMainMenu(admin.role),
         );
       }
+    });
+
+    bot.callbackQuery(/^confirm_unban_premium_(\d+)$/, async (ctx) => {
+      const admin = await this.getAdmin(ctx);
+      if (admin) await this.confirmUnbanPremiumUser(ctx);
+    });
+
+    bot.callbackQuery('cancel_unban_premium', async (ctx) => {
+      const admin = await this.getAdmin(ctx);
+      if (admin) await this.cancelUnbanPremium(ctx);
     });
 
     bot.callbackQuery('add_new_admin', async (ctx) => {
@@ -800,6 +837,9 @@ export class AdminHandler implements OnModuleInit {
         break;
       case AdminState.BLOCK_USER:
         await this.handleBlockUserSteps(ctx, text, session);
+        break;
+      case AdminState.UNBAN_PREMIUM_USER:
+        await this.handleUnbanPremiumUserSteps(ctx, text, session);
         break;
       default:
         this.logger.warn(`Unhandled session state: ${session.state}`);
@@ -1383,7 +1423,50 @@ export class AdminHandler implements OnModuleInit {
       return;
     }
 
-    let message = '💾 Database kanallar:\n\n';
+    let message = '💾 **Database kanallar:**\n\n';
+    channels.forEach((ch, i) => {
+      message += `${i + 1}. ${ch.channelName}\n`;
+    });
+
+    message += "\n📌 Kanalga o'tish uchun quyidagi raqamlardan birini tanlang:";
+
+    const inlineKeyboard = new InlineKeyboard();
+    channels.forEach((ch, i) => {
+      inlineKeyboard.text(`${i + 1}`, `goto_db_channel_${ch.channelId}`);
+      if ((i + 1) % 3 === 0) {
+        inlineKeyboard.row();
+      }
+    });
+    if (channels.length % 3 !== 0) {
+      inlineKeyboard.row();
+    }
+
+    // Add delete buttons
+    inlineKeyboard.text("🗑 O'chirish", 'show_delete_db_channels').row();
+
+    await ctx.reply(message, {
+      parse_mode: 'Markdown',
+      reply_markup: inlineKeyboard,
+    });
+
+    const keyboard = new Keyboard()
+      .text("➕ Database kanal qo'shish")
+      .row()
+      .text('🔙 Orqaga')
+      .resized();
+
+    await ctx.reply('Boshqaruv:', { reply_markup: keyboard });
+  }
+
+  private async showDeleteDatabaseChannels(ctx: BotContext) {
+    const admin = await this.getAdmin(ctx);
+    if (!admin) return;
+
+    await ctx.answerCallbackQuery();
+
+    const channels = await this.channelService.findAllDatabase();
+
+    let message = '💾 **Database kanallar:**\n\n';
     channels.forEach((ch, i) => {
       message += `${i + 1}. ${ch.channelName}\n`;
       message += `   ID: ${ch.channelId}\n`;
@@ -1393,22 +1476,74 @@ export class AdminHandler implements OnModuleInit {
       message += `\n`;
     });
 
+    message += "\n🗑 O'chirish uchun kanalni tanlang:";
+
     const inlineKeyboard = new InlineKeyboard();
     channels.forEach((ch) => {
       inlineKeyboard
         .text(`🗑 ${ch.channelName}`, `delete_db_channel_${ch.id}`)
         .row();
     });
+    inlineKeyboard.text('🔙 Orqaga', 'back_to_db_channels').row();
 
-    await ctx.reply(message, { reply_markup: inlineKeyboard });
+    await ctx.editMessageText(message, {
+      parse_mode: 'Markdown',
+      reply_markup: inlineKeyboard,
+    });
+  }
 
-    const keyboard = new Keyboard()
-      .text("➕ Database kanal qo'shish")
-      .row()
-      .text('🔙 Orqaga')
-      .resized();
+  private async gotoDbChannel(ctx: BotContext) {
+    const admin = await this.getAdmin(ctx);
+    if (!admin) return;
 
-    await ctx.reply("Yangi kanal qo'shish:", { reply_markup: keyboard });
+    await ctx.answerCallbackQuery();
+
+    const channelId = ctx.match![1] as string;
+
+    try {
+      // Get channel info
+      const chat = await this.grammyBot.bot.api.getChat(channelId);
+
+      let channelLink = '';
+      if ('username' in chat && chat.username) {
+        channelLink = `https://t.me/${chat.username}`;
+      } else {
+        // Try to get invite link for private channels
+        try {
+          const inviteLink =
+            await this.grammyBot.bot.api.exportChatInviteLink(channelId);
+          channelLink = inviteLink;
+        } catch (error) {
+          this.logger.error('Error getting invite link:', error);
+        }
+      }
+
+      if (channelLink) {
+        const keyboard = new InlineKeyboard().url(
+          "📱 Kanalga o'tish",
+          channelLink,
+        );
+
+        await ctx.reply(
+          `📢 Kanal: ${chat.title}\n\n` +
+            `Quyidagi tugma orqali kanalga o'tishingiz mumkin:`,
+          { reply_markup: keyboard },
+        );
+      } else {
+        await ctx.reply(
+          '❌ Kanal linkini olishda xatolik yuz berdi.\n' +
+            `Kanal ID: \`${channelId}\`\n\n` +
+            "Kanalga qo'lda kirish uchun ID dan foydalaning.",
+          { parse_mode: 'Markdown' },
+        );
+      }
+    } catch (error) {
+      this.logger.error('Error getting channel:', error);
+      await ctx.reply(
+        '❌ Kanalga ulanishda xatolik yuz berdi.\n' +
+          'Botning kanalda admin ekanligiga ishonch hosil qiling.',
+      );
+    }
   }
 
   private async startAddDatabaseChannel(ctx: BotContext) {
@@ -1438,7 +1573,7 @@ export class AdminHandler implements OnModuleInit {
     await this.channelService.deleteDatabaseChannel(channelId);
 
     await ctx.answerCallbackQuery({ text: '✅ Database kanal ochirildi' });
-    await this.showDatabaseChannels(ctx);
+    await this.showDeleteDatabaseChannels(ctx);
   }
 
   // ==================== PAYMENT MANAGEMENT ====================
@@ -1498,10 +1633,7 @@ export class AdminHandler implements OnModuleInit {
     }
 
     // Start session to ask for duration
-    this.sessionService.startSession(
-      ctx.from.id,
-      AdminState.APPROVE_PAYMENT,
-    );
+    this.sessionService.startSession(ctx.from.id, AdminState.APPROVE_PAYMENT);
     this.sessionService.updateSessionData(ctx.from.id, {
       paymentId,
       userId: payment.userId,
@@ -3135,13 +3267,47 @@ ${existingSerial.description || ''}
       // Get payment details
       const payment = await this.paymentService.findById(paymentId);
 
-      // Send notification to user
+      // Increment ban counter
+      const updatedUser = await this.prisma.user.update({
+        where: { id: payment.userId },
+        data: { premiumBanCount: { increment: 1 } },
+      });
+
+      const banCount = updatedUser.premiumBanCount;
+
+      // Send notification to user with warning
       try {
+        let message = '';
+
+        if (banCount === 1) {
+          // First warning
+          message =
+            `❌ **To'lovingiz rad etildi**\n\n` +
+            `📝 Sabab: ${reason}\n\n` +
+            `⚠️ **Ogohlantirish!**\n` +
+            `Siz to'lov qilishda yolg'on ma'lumotlardan foydalandingiz. Agar bu holat yana takrorlansa, botning bu funksiyasi siz uchun butunlay yopiladi.\n\n` +
+            `🚨 Ogohlantirish: 1/2`;
+        } else if (banCount >= 2) {
+          // Second warning - ban user
+          await this.prisma.user.update({
+            where: { id: payment.userId },
+            data: {
+              isPremiumBanned: true,
+              premiumBannedAt: new Date(),
+            },
+          });
+
+          message =
+            `❌ **To'lovingiz rad etildi**\n\n` +
+            `📝 Sabab: ${reason}\n\n` +
+            `🚫 **Premium'dan foydalanish bloklandi!**\n` +
+            `Siz botda yolg'on to'lov ma'lumotlarini ishlatganingiz uchun Premium'dan endi foydalana olmaysiz.\n\n` +
+            `ℹ️ Blokni faqat admin ochishi mumkin.`;
+        }
+
         await this.grammyBot.bot.api.sendMessage(
           payment.user.telegramId,
-          `❌ **To'lovingiz rad etildi**\n\n` +
-            `📝 Sabab: ${reason}\n\n` +
-            `💡 Iltimos, to\'g\'ri chekni qayta yuboring yoki admin bilan bog\'laning.`,
+          message,
           { parse_mode: 'Markdown' },
         );
       } catch (error) {
@@ -3154,7 +3320,9 @@ ${existingSerial.description || ''}
       await ctx.reply(
         `❌ To'lov rad etildi!\n\n` +
           `👤 Foydalanuvchi: ${payment.user.firstName}\n` +
-          `📝 Sabab: ${reason}`,
+          `📝 Sabab: ${reason}\n` +
+          `⚠️ Ogohlantirish: ${banCount}/2` +
+          (banCount >= 2 ? '\n\n🚫 Foydalanuvchi premiumdan bloklandi!' : ''),
         AdminKeyboard.getAdminMainMenu(admin.role),
       );
     } catch (error) {
@@ -3795,6 +3963,253 @@ ${existingSerial.description || ''}
       this.logger.error('Error confirming block user:', error);
       await ctx.reply('❌ Xatolik yuz berdi.');
       this.sessionService.clearSession(ctx.from.id);
+    }
+  }
+
+  // ==================== PREMIUM BANNED USERS ====================
+  private async showPremiumBannedUsersMenu(ctx: BotContext) {
+    try {
+      const admin = await this.getAdmin(ctx);
+      if (!admin) return;
+
+      const keyboard = new Keyboard()
+        .text("👥 Hamma userlarni ko'rish")
+        .text('🔍 Qidirish')
+        .row()
+        .text('🔙 Orqaga');
+
+      await ctx.reply(
+        '🚫 **Premium banned users**\n\n' +
+          "Yolg'on to'lov ma'lumotlarini ishlatgan va premium'dan bloklangan foydalanuvchilar.",
+        { reply_markup: keyboard.resized() },
+      );
+    } catch (error) {
+      this.logger.error('Error showing premium banned users menu:', error);
+      await ctx.reply('❌ Xatolik yuz berdi.');
+    }
+  }
+
+  private async showAllPremiumBannedUsers(ctx: BotContext) {
+    try {
+      const admin = await this.getAdmin(ctx);
+      if (!admin) return;
+
+      const bannedUsers = await this.prisma.user.findMany({
+        where: { isPremiumBanned: true },
+        orderBy: { premiumBannedAt: 'desc' },
+        take: 50,
+      });
+
+      if (bannedUsers.length === 0) {
+        await ctx.reply("✅ Premium'dan bloklangan foydalanuvchilar yo'q.");
+        return;
+      }
+
+      let message = '🚫 **Premium banned users** (50 ta):\n\n';
+
+      bannedUsers.forEach((user, index) => {
+        const username = user.username ? `@${user.username}` : "Username yo'q";
+        const name = user.firstName || "Ism yo'q";
+        const banDate = user.premiumBannedAt
+          ? user.premiumBannedAt.toLocaleDateString('uz-UZ')
+          : "Noma'lum";
+
+        message += `${index + 1}. ${name} (${username})\n`;
+        message += `   ID: \`${user.telegramId}\`\n`;
+        message += `   ⚠️ Ogohlantirish: ${user.premiumBanCount}/2\n`;
+        message += `   📅 Ban sanasi: ${banDate}\n\n`;
+      });
+
+      message +=
+        '\n🔍 Foydalanuvchini qidirish uchun "Qidirish" tugmasini bosing.';
+
+      await ctx.reply(message, { parse_mode: 'Markdown' });
+    } catch (error) {
+      this.logger.error('Error showing all premium banned users:', error);
+      await ctx.reply('❌ Xatolik yuz berdi.');
+    }
+  }
+
+  private async startSearchPremiumBannedUser(ctx: BotContext) {
+    try {
+      const admin = await this.getAdmin(ctx);
+      if (!admin || !ctx.from) return;
+
+      this.sessionService.startSession(
+        ctx.from.id,
+        AdminState.UNBAN_PREMIUM_USER,
+      );
+      this.sessionService.updateSessionData(ctx.from.id, { step: 'search' });
+
+      await ctx.reply(
+        '🔍 Foydalanuvchini qidirish\n\n' +
+          'Username (@ belgisisiz) yoki User ID ni kiriting:',
+        AdminKeyboard.getCancelButton(),
+      );
+    } catch (error) {
+      this.logger.error('Error starting search premium banned user:', error);
+      await ctx.reply('❌ Xatolik yuz berdi.');
+    }
+  }
+
+  private async handleUnbanPremiumUserSteps(
+    ctx: BotContext,
+    text: string,
+    session: any,
+  ) {
+    try {
+      const admin = await this.getAdmin(ctx);
+      if (!admin || !ctx.from) return;
+
+      const step = session.data?.step || 'search';
+
+      if (step === 'search') {
+        // Search user by username or ID
+        let user = null;
+
+        // Try to find by username (remove @ if present)
+        const username = text.replace('@', '');
+        user = await this.prisma.user.findFirst({
+          where: {
+            OR: [{ username: username }, { telegramId: text }],
+          },
+        });
+
+        if (!user) {
+          await ctx.reply(
+            '❌ Foydalanuvchi topilmadi.\n\n' +
+              'Qaytadan kiriting yoki bekor qiling:',
+            AdminKeyboard.getCancelButton(),
+          );
+          return;
+        }
+
+        if (!user.isPremiumBanned) {
+          await ctx.reply(
+            "⚠️ Bu foydalanuvchi premium'dan bloklanmagan.\n\n" +
+              'Boshqa foydalanuvchini qidiring:',
+            AdminKeyboard.getCancelButton(),
+          );
+          return;
+        }
+
+        // Show confirmation
+        const username_display = user.username
+          ? `@${user.username}`
+          : "Username yo'q";
+        const banDate = user.premiumBannedAt
+          ? user.premiumBannedAt.toLocaleDateString('uz-UZ')
+          : "Noma'lum";
+
+        await ctx.reply(
+          `📋 **Foydalanuvchi topildi:**\n\n` +
+            `👤 Ism: ${user.firstName || "Noma'lum"}\n` +
+            `📝 Username: ${username_display}\n` +
+            `🆔 ID: \`${user.telegramId}\`\n` +
+            `⚠️ Ogohlantirish: ${user.premiumBanCount}/2\n` +
+            `📅 Ban sanasi: ${banDate}\n\n` +
+            `❓ Haqiqatdan ham bu foydalanuvchini premium ban'dan ochmoqchimisiz?`,
+          {
+            parse_mode: 'Markdown',
+            reply_markup: {
+              inline_keyboard: [
+                [
+                  {
+                    text: '✅ Ha, ochish',
+                    callback_data: `confirm_unban_premium_${user.id}`,
+                  },
+                  { text: "❌ Yo'q", callback_data: 'cancel_unban_premium' },
+                ],
+              ],
+            },
+          },
+        );
+
+        // Update session
+        this.sessionService.updateSessionData(ctx.from.id, {
+          step: 'confirm',
+          userId: user.id,
+          username: user.username,
+        });
+      }
+    } catch (error) {
+      this.logger.error('Error handling unban premium user steps:', error);
+      await ctx.reply('❌ Xatolik yuz berdi.');
+      this.sessionService.clearSession(ctx.from.id);
+    }
+  }
+
+  private async confirmUnbanPremiumUser(ctx: any) {
+    try {
+      await ctx.answerCallbackQuery();
+
+      // Get session data
+      const session = this.sessionService.getSession(ctx.from.id);
+      if (!session || !session.data || !session.data.userId) {
+        await ctx.reply("❌ Ma'lumot topilmadi. Qaytadan urinib ko'ring.");
+        return;
+      }
+
+      const { userId, username } = session.data;
+
+      // Unban user from premium
+      const user = await this.prisma.user.update({
+        where: { id: userId },
+        data: {
+          isPremiumBanned: false,
+          premiumBannedAt: null,
+          premiumBanCount: 0, // Reset counter
+        },
+      });
+
+      // Notify user
+      try {
+        await this.grammyBot.bot.api.sendMessage(
+          user.telegramId,
+          '✅ **Yaxshi xabar!**\n\n' +
+            'Sizning premium ban blokingiz ochildi. Endi premium sotib olishingiz mumkin.\n\n' +
+            "💡 Iltimos, to'g'ri to'lov ma'lumotlarini yuboring.",
+          { parse_mode: 'Markdown' },
+        );
+      } catch (error) {
+        this.logger.error('Error notifying user:', error);
+      }
+
+      // Clear session
+      this.sessionService.clearSession(ctx.from.id);
+
+      // Edit message to remove buttons
+      await ctx.editMessageReplyMarkup({ inline_keyboard: [] });
+
+      const admin = await this.adminService.getAdminByTelegramId(ctx.from.id);
+      await ctx.reply(
+        `✅ Foydalanuvchi premium ban'dan ochildi!\n\n` +
+          `👤 Ism: ${user.firstName || "Noma'lum"}\n` +
+          `📝 Username: @${username || "Noma'lum"}\n` +
+          `🔓 Ochilgan sana: ${new Date().toLocaleString('uz-UZ')}`,
+        AdminKeyboard.getAdminMainMenu(admin?.role || 'ADMIN'),
+      );
+    } catch (error) {
+      this.logger.error('Error confirming unban premium user:', error);
+      await ctx.reply('❌ Xatolik yuz berdi.');
+      this.sessionService.clearSession(ctx.from.id);
+    }
+  }
+
+  private async cancelUnbanPremium(ctx: any) {
+    try {
+      await ctx.answerCallbackQuery();
+      await ctx.editMessageReplyMarkup({ inline_keyboard: [] });
+
+      this.sessionService.clearSession(ctx.from.id);
+
+      const admin = await this.adminService.getAdminByTelegramId(ctx.from.id);
+      await ctx.reply(
+        '❌ Bekor qilindi.',
+        AdminKeyboard.getAdminMainMenu(admin?.role || 'ADMIN'),
+      );
+    } catch (error) {
+      this.logger.error('Error canceling unban premium:', error);
     }
   }
 }

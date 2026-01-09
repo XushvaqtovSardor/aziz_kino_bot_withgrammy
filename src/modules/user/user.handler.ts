@@ -56,6 +56,7 @@ export class UserHandler implements OnModuleInit {
     bot.hears('💎 Premium sotib olish', this.showPremium.bind(this));
     bot.hears('ℹ️ Bot haqida', this.showAbout.bind(this));
     bot.hears('📞 Aloqa', this.showContact.bind(this));
+    bot.hears('🔙 Orqaga', this.handleBack.bind(this));
 
     // Callback query handlers
     bot.callbackQuery(/^movie_\d+$/, this.handleMovieCallback.bind(this));
@@ -186,7 +187,10 @@ export class UserHandler implements OnModuleInit {
 
 ✍🏻 Kino kodini yuboring.`.trim();
 
-    await ctx.reply(welcomeMessage, MainMenuKeyboard.getMainMenu(isPremium));
+    await ctx.reply(
+      welcomeMessage,
+      MainMenuKeyboard.getMainMenu(isPremium, user.isPremiumBanned),
+    );
   }
 
   // ==================== MOVIES ====================
@@ -229,6 +233,12 @@ export class UserHandler implements OnModuleInit {
 
   // ==================== BOT HAQIDA ====================
   private async showAbout(ctx: BotContext) {
+    if (!ctx.from) return;
+
+    const user = await this.userService.findByTelegramId(String(ctx.from.id));
+    const isPremium = user?.isPremium || false;
+    const isPremiumBanned = user?.isPremiumBanned || false;
+
     const fields = await this.fieldService.findAll();
 
     if (fields.length === 0) {
@@ -240,6 +250,10 @@ export class UserHandler implements OnModuleInit {
           "💎 Premium obuna bilan reklama yo'q\n\n" +
           "❌ Hozircha field kanallar yo'q.",
         { parse_mode: 'Markdown' },
+      );
+      await ctx.reply(
+        'Asosiy menyuga qaytish uchun:',
+        MainMenuKeyboard.getMainMenuWithBack(isPremium, isPremiumBanned)
       );
       return;
     }
@@ -335,6 +349,22 @@ export class UserHandler implements OnModuleInit {
 
   // ==================== PREMIUM ====================
   private async showPremium(ctx: BotContext) {
+    if (!ctx.from) return;
+
+    // Check if user is banned from premium
+    const user = await this.prisma.user.findUnique({
+      where: { telegramId: String(ctx.from.id) },
+    });
+
+    if (user?.isPremiumBanned) {
+      await ctx.reply(
+        "🚫 Sizda Premium sotib olish imkoniyati yo'q.\n\n" +
+          "Sabab: Yolg'on to'lov ma'lumotlaridan foydalanganingiz uchun bloklangansiz.\n\n" +
+          'ℹ️ Blokni faqat admin ochishi mumkin.',
+      );
+      return;
+    }
+
     // Handle callback query if it exists
     if (ctx.callbackQuery) {
       await ctx.answerCallbackQuery();
@@ -365,7 +395,9 @@ Qaysi muddatga obuna bo'lmoqchisiz?
       .text('3 oy', 'buy_premium_3')
       .row()
       .text('6 oy', 'buy_premium_6')
-      .text('1 yil', 'buy_premium_12');
+      .text('1 yil', 'buy_premium_12')
+      .row()
+      .text('🔙 Orqaga', 'back_to_main');
 
     if (ctx.callbackQuery) {
       await ctx.editMessageText(message, {
@@ -383,6 +415,19 @@ Qaysi muddatga obuna bo'lmoqchisiz?
   private async handlePremiumPurchase(ctx: BotContext) {
     if (!ctx.callbackQuery || !('data' in ctx.callbackQuery)) return;
     if (!ctx.from) return;
+
+    // Check if user is banned from premium
+    const user = await this.prisma.user.findUnique({
+      where: { telegramId: String(ctx.from.id) },
+    });
+
+    if (user?.isPremiumBanned) {
+      await ctx.answerCallbackQuery({
+        text: "🚫 Sizda Premium sotib olish imkoniyati yo'q",
+        show_alert: true,
+      });
+      return;
+    }
 
     const months = parseInt(ctx.callbackQuery.data.replace('buy_premium_', ''));
     await ctx.answerCallbackQuery();
@@ -617,6 +662,8 @@ To'lov qilgandan keyin chekni botga yuboring.
 
   // ==================== CONTACT ====================
   private async showContact(ctx: BotContext) {
+    if (!ctx.from) return;
+
     const settings = await this.settingsService.getSettings();
 
     // Use custom contact message if set by admin, otherwise use default
@@ -630,6 +677,15 @@ Savollaringiz bo'lsa murojaat qiling:
     `.trim();
 
     await ctx.reply(message, { parse_mode: 'Markdown' });
+
+    // Add back button
+    const user = await this.userService.findByTelegramId(String(ctx.from.id));
+    const isPremium = user?.isPremium || false;
+    const isPremiumBanned = user?.isPremiumBanned || false;
+    await ctx.reply(
+      'Asosiy menyuga qaytish uchun:',
+      MainMenuKeyboard.getMainMenuWithBack(isPremium, isPremiumBanned)
+    );
   }
 
   // ==================== TEXT MESSAGE HANDLER ====================
@@ -746,15 +802,15 @@ Savollaringiz bo'lsa murojaat qiling:
       const botUsername = (await ctx.api.getMe()).username;
       const field = await this.fieldService.findOne(movie.fieldId);
 
-      // If movie has multiple episodes, show episode selection like serials
-      if (episodes.length > 1) {
+      // If movie has multiple episodes (total > 1), show episode selection
+      if (movie.totalEpisodes > 1) {
         const movieDeepLink = `https://t.me/${botUsername}?start=${movie.code}`;
 
         const caption = `
 ╭────────────────────
 ├‣  Kino nomi : ${movie.title}
 ├‣  Kino kodi: ${movie.code}
-├‣  Qism: ${episodes.length}
+├‣  Qism: ${movie.totalEpisodes}
 ├‣  Janrlari: ${movie.genre || "Noma'lum"}
 ├‣  Kanal: ${field?.channelLink || '@' + (field?.name || 'Kanal')}
 ╰────────────────────
@@ -762,17 +818,24 @@ Savollaringiz bo'lsa murojaat qiling:
         `.trim();
 
         // Create keyboard with episode numbers
+        // Include episode 1 (original movie video) + additional episodes
         const keyboard = new InlineKeyboard();
+
+        // Add button for episode 1 (original video)
+        keyboard.text('1', `movie_episode_${movie.id}_1`);
+
+        // Add buttons for additional episodes
         episodes.forEach((episode, index) => {
           keyboard.text(
             `${episode.episodeNumber}`,
             `movie_episode_${movie.id}_${episode.episodeNumber}`,
           );
-          if ((index + 1) % 5 === 0) keyboard.row();
+          // New row after every 5 buttons
+          if ((index + 2) % 5 === 0) keyboard.row(); // +2 because we started with episode 1
         });
-        if (episodes.length % 5 !== 0) keyboard.row();
+        if ((episodes.length + 1) % 5 !== 0) keyboard.row();
 
-        const shareLink = `https://t.me/share/url?url=${movieDeepLink}&text=🎬 ${encodeURIComponent(movie.title)}%0A%0A📊Parts: ${episodes.length}%0A📝 Kod: ${movie.code}%0A%0A👆 Kinoni tomosha qilish uchun bosing:`;
+        const shareLink = `https://t.me/share/url?url=${movieDeepLink}&text=🎬 ${encodeURIComponent(movie.title)}%0A%0A📊Parts: ${movie.totalEpisodes}%0A📝 Kod: ${movie.code}%0A%0A👆 Kinoni tomosha qilish uchun bosing:`;
         keyboard.url('📤 Share qilish', shareLink);
 
         // Send poster with episodes
@@ -977,10 +1040,8 @@ Savollaringiz bo'lsa murojaat qiling:
 
     // Add all channel buttons
     status.unsubscribedChannels.forEach((channel) => {
-      const emoji = channel.isExternal ? '🌐' : '📱';
-      keyboard
-        .url(`${emoji} ${channel.channelName}`, channel.channelLink)
-        .row();
+      // const emoji = channel.isExternal ? '🌐' : '📱';
+      keyboard.url(` ${channel.channelName}`, channel.channelLink).row();
     });
 
     keyboard.text('✅ Tekshirish', 'check_subscription').row();
@@ -1292,17 +1353,12 @@ Savollaringiz bo'lsa murojaat qiling:
     });
 
     try {
-      const episode = await this.movieEpisodeService.findByMovieIdAndNumber(
-        movieId,
-        episodeNumber,
-      );
-      if (!episode) {
-        await ctx.reply('❌ Qism topilmadi.');
+      const movie = await this.movieService.findById(movieId);
+      if (!movie) {
+        await ctx.reply('❌ Kino topilmadi.');
         return;
       }
 
-      // Send episode video with share button
-      const movie = await this.movieService.findById(movieId);
       const botUsername = (await ctx.api.getMe()).username;
       const field = await this.fieldService.findOne(movie.fieldId);
       const shareLink = `https://t.me/share/url?url=https://t.me/${botUsername}?start=${movie.code}&text=🎬 ${encodeURIComponent(movie.title)}\n\n📊 Qismlar: ${movie.totalEpisodes}\n📖 Kod: ${movie.code}\n\n👇 Kinoni tomosha qilish uchun bosing:`;
@@ -1324,30 +1380,72 @@ Savollaringiz bo'lsa murojaat qiling:
 ▶️ Kinoning to'liq qismini @${botUsername} dan tomosha qilishingiz mumkin!
       `.trim();
 
-      if (episode.videoFileId) {
-        await ctx.replyWithVideo(episode.videoFileId, {
-          caption: videoCaption,
-          protect_content: true,
-          reply_markup: shareKeyboard,
-        });
-      } else if (episode.videoMessageId) {
-        // Try to copy from channel
-        try {
-          const videoData = JSON.parse(episode.videoMessageId);
-          if (Array.isArray(videoData) && videoData.length > 0) {
-            await ctx.api.copyMessage(
-              ctx.from.id,
-              videoData[0].channelId,
-              videoData[0].messageId,
-              {
-                protect_content: true,
-                reply_markup: shareKeyboard,
-              },
-            );
+      // If episode 1, send the original movie video
+      if (episodeNumber === 1) {
+        if (movie.videoFileId) {
+          await ctx.replyWithVideo(movie.videoFileId, {
+            caption: videoCaption,
+            protect_content: true,
+            reply_markup: shareKeyboard,
+          });
+        } else if (movie.videoMessageId) {
+          // Try to copy from channel
+          try {
+            const videoData = JSON.parse(movie.videoMessageId);
+            if (Array.isArray(videoData) && videoData.length > 0) {
+              await ctx.api.copyMessage(
+                ctx.from.id,
+                videoData[0].channelId,
+                videoData[0].messageId,
+                {
+                  protect_content: true,
+                  reply_markup: shareKeyboard,
+                  caption: videoCaption,
+                },
+              );
+            }
+          } catch (error) {
+            this.logger.error('Error copying movie video:', error);
+            await ctx.reply('❌ Video yuklashda xatolik.');
           }
-        } catch (error) {
-          this.logger.error('Error copying movie episode video:', error);
-          await ctx.reply('❌ Video yuklashda xatolik.');
+        }
+      } else {
+        // For episodes > 1, get from MovieEpisode table
+        const episode = await this.movieEpisodeService.findByMovieIdAndNumber(
+          movieId,
+          episodeNumber,
+        );
+        if (!episode) {
+          await ctx.reply('❌ Qism topilmadi.');
+          return;
+        }
+
+        if (episode.videoFileId) {
+          await ctx.replyWithVideo(episode.videoFileId, {
+            caption: videoCaption,
+            protect_content: true,
+            reply_markup: shareKeyboard,
+          });
+        } else if (episode.videoMessageId) {
+          // Try to copy from channel
+          try {
+            const videoData = JSON.parse(episode.videoMessageId);
+            if (Array.isArray(videoData) && videoData.length > 0) {
+              await ctx.api.copyMessage(
+                ctx.from.id,
+                videoData[0].channelId,
+                videoData[0].messageId,
+                {
+                  protect_content: true,
+                  reply_markup: shareKeyboard,
+                  caption: videoCaption,
+                },
+              );
+            }
+          } catch (error) {
+            this.logger.error('Error copying movie episode video:', error);
+            await ctx.reply('❌ Video yuklashda xatolik.');
+          }
         }
       }
 
