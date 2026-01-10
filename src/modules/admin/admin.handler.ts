@@ -3638,13 +3638,16 @@ ${existingSerial.description || ''}
       this.logger.log(`Fetching admin with telegramId: ${ctx.from.id}`);
       let admin;
       try {
-        admin = await this.adminService.getAdminByTelegramId(ctx.from.id);
+        admin = await this.adminService.getAdminByTelegramId(
+          String(ctx.from.id),
+        );
       } catch (adminError) {
         this.logger.error('Error fetching admin:', adminError);
-        this.logger.error(
-          'Admin error details:',
-          JSON.stringify(adminError, null, 2),
-        );
+        console.error('ADMIN ERROR:', adminError);
+        if (adminError instanceof Error) {
+          this.logger.error('Error message:', adminError.message);
+          this.logger.error('Error stack:', adminError.stack);
+        }
         throw adminError;
       }
 
@@ -3674,16 +3677,13 @@ ${existingSerial.description || ''}
       );
     } catch (error) {
       this.logger.error('Error starting premiere broadcast:', error);
-      this.logger.error('Error message:', error?.message);
-      this.logger.error('Error name:', error?.name);
-      this.logger.error('Error stack:', error?.stack);
-      try {
-        this.logger.error(
-          'Full error object:',
-          JSON.stringify(error, Object.getOwnPropertyNames(error), 2),
-        );
-      } catch (jsonError) {
-        this.logger.error('Could not stringify error');
+      console.error('PREMIERE ERROR:', error);
+      if (error instanceof Error) {
+        this.logger.error('Error message:', error.message);
+        this.logger.error('Error name:', error.name);
+        this.logger.error('Error stack:', error.stack);
+      } else {
+        this.logger.error('Non-Error object thrown:', typeof error, error);
       }
       try {
         await ctx.reply('❌ Xatolik yuz berdi.');
@@ -3944,13 +3944,16 @@ ${existingSerial.description || ''}
       this.logger.log(`Fetching admin with telegramId: ${ctx.from.id}`);
       let admin;
       try {
-        admin = await this.adminService.getAdminByTelegramId(ctx.from.id);
+        admin = await this.adminService.getAdminByTelegramId(
+          String(ctx.from.id),
+        );
       } catch (adminError) {
         this.logger.error('Error fetching admin:', adminError);
-        this.logger.error(
-          'Admin error details:',
-          JSON.stringify(adminError, null, 2),
-        );
+        console.error('ADMIN ERROR (Telegram Premium):', adminError);
+        if (adminError instanceof Error) {
+          this.logger.error('Error message:', adminError.message);
+          this.logger.error('Error stack:', adminError.stack);
+        }
         throw adminError;
       }
 
@@ -3996,16 +3999,13 @@ ${existingSerial.description || ''}
       );
     } catch (error) {
       this.logger.error('Error starting Telegram Premium broadcast:', error);
-      this.logger.error('Error message:', error?.message);
-      this.logger.error('Error name:', error?.name);
-      this.logger.error('Error stack:', error?.stack);
-      try {
-        this.logger.error(
-          'Full error object:',
-          JSON.stringify(error, Object.getOwnPropertyNames(error), 2),
-        );
-      } catch (jsonError) {
-        this.logger.error('Could not stringify error');
+      console.error('TELEGRAM PREMIUM ERROR:', error);
+      if (error instanceof Error) {
+        this.logger.error('Error message:', error.message);
+        this.logger.error('Error name:', error.name);
+        this.logger.error('Error stack:', error.stack);
+      } else {
+        this.logger.error('Non-Error object thrown:', typeof error, error);
       }
       try {
         await ctx.reply('❌ Xatolik yuz berdi.');
