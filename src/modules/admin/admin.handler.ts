@@ -2104,10 +2104,10 @@ Qaysi guruhga xabar yubormoqchisiz?
 
       this.logger.log(`[showWebPanel] Generated URL: ${adminPanelUrl}`);
 
-      const keyboard = new InlineKeyboard().url(
-        "🌐 Admin Panelga o'tish",
-        adminPanelUrl,
-      );
+      const keyboard = new InlineKeyboard()
+        .url("🌐 Admin Panelga o'tish", adminPanelUrl)
+        .row()
+        .text('🔙 Orqaga', 'back_to_admin_menu');
       await ctx.reply(
         `🌐 Web Admin Panel\n\n` +
           `👤 Admin: ${admin.username || admin.telegramId}\n` +
@@ -3448,8 +3448,8 @@ ${existingSerial.description || ''}
       });
 
       // Send confirmation to admin first
-      if (content.poster) {
-        await ctx.replyWithPhoto(content.poster, {
+      if (content.posterFileId) {
+        await ctx.replyWithPhoto(content.posterFileId, {
           caption:
             '📤 Quyidagi xabar barcha foydalanuvchilarga yuboriladi:\n\n' +
             caption,
@@ -3492,7 +3492,7 @@ ${existingSerial.description || ''}
           contentType,
           code: codeNumber,
           caption,
-          poster: content.poster,
+          poster: content.posterFileId,
           userCount: users.length,
         },
       });
@@ -3521,6 +3521,10 @@ ${existingSerial.description || ''}
         where: { isBlocked: false },
       });
 
+      // Get bot username
+      const botInfo = await ctx.api.getMe();
+      const botUsername = botInfo.username || 'bot';
+
       // Send to all users
       let successCount = 0;
       let failCount = 0;
@@ -3533,7 +3537,7 @@ ${existingSerial.description || ''}
       for (const user of users) {
         try {
           // Create deep link button
-          const deepLink = `https://t.me/${ctx.me.username}?start=${contentType}_${code}`;
+          const deepLink = `https://t.me/${botUsername}?start=${contentType}_${code}`;
           const keyboard = {
             inline_keyboard: [[{ text: '▶️ Tomosha qilish', url: deepLink }]],
           };

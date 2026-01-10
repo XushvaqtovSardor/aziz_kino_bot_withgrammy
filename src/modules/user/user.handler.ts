@@ -78,6 +78,7 @@ export class UserHandler implements OnModuleInit {
       this.handleCheckSubscription.bind(this),
     );
     bot.callbackQuery(/^show_premium$/, this.showPremium.bind(this));
+    bot.callbackQuery(/^back_to_main$/, this.handleBackCallback.bind(this));
     bot.callbackQuery(
       /^buy_premium_(\d+)$/,
       this.handlePremiumPurchase.bind(this),
@@ -209,6 +210,7 @@ export class UserHandler implements OnModuleInit {
     fields.forEach((field) => {
       keyboard.text(field.name, `field_${field.id}`).row();
     });
+    keyboard.text('🔙 Orqaga', 'back_to_main');
 
     await ctx.reply(message, {
       parse_mode: 'Markdown',
@@ -223,11 +225,22 @@ export class UserHandler implements OnModuleInit {
 
   // ==================== SEARCH ====================
   private async handleSearch(ctx: BotContext) {
+    if (!ctx.from) return;
+
+    const user = await this.userService.findByTelegramId(String(ctx.from.id));
+    const isPremium = user?.isPremium || false;
+    const isPremiumBanned = user?.isPremiumBanned || false;
+
     await ctx.reply(
       '🔍 **Qidirish**\n\n' +
         'Kino yoki serial kodini kiriting:\n' +
         'Masalan: 12345',
       { parse_mode: 'Markdown' },
+    );
+
+    await ctx.reply(
+      'Asosiy menyuga qaytish uchun:',
+      MainMenuKeyboard.getMainMenuWithBack(isPremium, isPremiumBanned),
     );
   }
 
@@ -242,6 +255,10 @@ export class UserHandler implements OnModuleInit {
     const fields = await this.fieldService.findAll();
 
     if (fields.length === 0) {
+      const emptyKeyboard = new InlineKeyboard().text(
+        '🔙 Orqaga',
+        'back_to_main',
+      );
       await ctx.reply(
         'ℹ️ **Bot haqida**\n\n' +
           'Bu bot orqali minglab kino va seriallarni tomosha qilishingiz mumkin.\n\n' +
@@ -249,11 +266,10 @@ export class UserHandler implements OnModuleInit {
           '📱 Mobil va kompyuterda ishlaydi\n' +
           "💎 Premium obuna bilan reklama yo'q\n\n" +
           "❌ Hozircha field kanallar yo'q.",
-        { parse_mode: 'Markdown' },
-      );
-      await ctx.reply(
-        'Asosiy menyuga qaytish uchun:',
-        MainMenuKeyboard.getMainMenuWithBack(isPremium, isPremiumBanned)
+        {
+          parse_mode: 'Markdown',
+          reply_markup: emptyKeyboard,
+        },
       );
       return;
     }
@@ -276,6 +292,9 @@ export class UserHandler implements OnModuleInit {
         buttonsInRow = 0;
       }
     });
+
+    // Add back button to inline keyboard
+    keyboard.row().text('🔙 Orqaga', 'back_to_main');
 
     await ctx.reply(message, {
       parse_mode: 'Markdown',
@@ -303,6 +322,7 @@ export class UserHandler implements OnModuleInit {
     });
 
     if (fields.length % 5 !== 0) keyboard.row();
+    keyboard.text('🔙 Orqaga', 'back_to_main');
 
     await ctx.reply(message, {
       parse_mode: 'Markdown',
@@ -660,6 +680,46 @@ To'lov qilgandan keyin chekni botga yuboring.
     await ctx.reply("⚙️ Sozlamalar bo'limi ishlab chiqilmoqda...");
   }
 
+  // ==================== BACK BUTTON ====================
+  private async handleBack(ctx: BotContext) {
+    if (!ctx.from) return;
+
+    const user = await this.userService.findByTelegramId(String(ctx.from.id));
+    if (!user) return;
+
+    const isPremium = user.isPremium || false;
+    const isPremiumBanned = user.isPremiumBanned || false;
+
+    await ctx.reply(
+      '🏠 Asosiy menyu',
+      MainMenuKeyboard.getMainMenu(isPremium, isPremiumBanned),
+    );
+  }
+
+  private async handleBackCallback(ctx: BotContext) {
+    if (!ctx.callbackQuery || !ctx.from) return;
+
+    await ctx.answerCallbackQuery();
+
+    const user = await this.userService.findByTelegramId(String(ctx.from.id));
+    if (!user) return;
+
+    const isPremium = user.isPremium || false;
+    const isPremiumBanned = user.isPremiumBanned || false;
+
+    // Delete the inline keyboard message
+    try {
+      await ctx.deleteMessage();
+    } catch (error) {
+      this.logger.error('Error deleting message:', error);
+    }
+
+    await ctx.reply(
+      '🏠 Asosiy menyu',
+      MainMenuKeyboard.getMainMenu(isPremium, isPremiumBanned),
+    );
+  }
+
   // ==================== CONTACT ====================
   private async showContact(ctx: BotContext) {
     if (!ctx.from) return;
@@ -676,16 +736,12 @@ Savollaringiz bo'lsa murojaat qiling:
 👤 Admin: ${settings.supportUsername || '@admin'}
     `.trim();
 
-    await ctx.reply(message, { parse_mode: 'Markdown' });
+    const keyboard = new InlineKeyboard().text('🔙 Orqaga', 'back_to_main');
 
-    // Add back button
-    const user = await this.userService.findByTelegramId(String(ctx.from.id));
-    const isPremium = user?.isPremium || false;
-    const isPremiumBanned = user?.isPremiumBanned || false;
-    await ctx.reply(
-      'Asosiy menyuga qaytish uchun:',
-      MainMenuKeyboard.getMainMenuWithBack(isPremium, isPremiumBanned)
-    );
+    await ctx.reply(message, {
+      parse_mode: 'Markdown',
+      reply_markup: keyboard,
+    });
   }
 
   // ==================== TEXT MESSAGE HANDLER ====================
@@ -836,7 +892,10 @@ Savollaringiz bo'lsa murojaat qiling:
         if ((episodes.length + 1) % 5 !== 0) keyboard.row();
 
         const shareLink = `https://t.me/share/url?url=${movieDeepLink}&text=🎬 ${encodeURIComponent(movie.title)}%0A%0A📊Parts: ${movie.totalEpisodes}%0A📝 Kod: ${movie.code}%0A%0A👆 Kinoni tomosha qilish uchun bosing:`;
-        keyboard.url('📤 Share qilish', shareLink);
+        keyboard
+          .url('📤 Share qilish', shareLink)
+          .row()
+          .text('🔙 Orqaga', 'back_to_main');
 
         // Send poster with episodes
         await ctx.replyWithPhoto(movie.posterFileId, {
@@ -940,7 +999,9 @@ Savollaringiz bo'lsa murojaat qiling:
       keyboard
         .url(`📺 Serial kodi: ${serial.code}`, serialDeepLink)
         .row()
-        .text('📤 Ulashish', `share_serial_${code}`);
+        .text('📤 Ulashish', `share_serial_${code}`)
+        .row()
+        .text('🔙 Orqaga', 'back_to_main');
 
       await ctx.replyWithPhoto(serial.posterFileId, {
         caption,
@@ -1473,10 +1534,13 @@ Savollaringiz bo'lsa murojaat qiling:
         return;
       }
 
-      const keyboard = new InlineKeyboard().url(
-        "📢 Kanalga o'tish",
-        field.channelLink || `https://t.me/${field.channelId}`,
-      );
+      const keyboard = new InlineKeyboard()
+        .url(
+          "📢 Kanalga o'tish",
+          field.channelLink || `https://t.me/${field.channelId}`,
+        )
+        .row()
+        .text('🔙 Orqaga', 'back_to_main');
 
       await ctx.reply(
         `📁 **${field.name}**\n\n` +
