@@ -276,13 +276,13 @@ export class SerialManagementService {
         for (const dbChannel of dbChannels) {
           try {
             const caption = `╭────────────────────
-├‣  Serial nomi: ${title}
+├‣  Serial nomi : ${title}
 ├‣  Serial kodi: ${code}
 ├‣  Qism: ${ep.episodeNumber}
 ├‣  Janrlari: ${genre}
-├‣  Kanal: ${dbChannel.channelLink || 'https://t.me/' + dbChannel.channelName}
+├‣  Kanal: ${selectedField.channelLink || `https://t.me/${selectedField.channelId?.replace('@', '').replace('-100', '')}`}
 ╰────────────────────
-▶️ Serialning to'liq qismini https://t.me/${botUsername}?start=s${code} dan tomosha qilishingiz mumkin!`;
+▶️ Serialning to'liq qismini @${botUsername} dan tomosha qilishingiz mumkin!`;
 
             const sentVideo = await ctx.api.sendVideo(
               dbChannel.channelId,
@@ -341,9 +341,9 @@ export class SerialManagementService {
 ├‣  Serial kodi: ${code}
 ├‣  Qismlar: ${episodes.length}
 ├‣  Janrlari: ${genre}
-├‣  Kanal: ${selectedField.channelLink || '@' + selectedField.name}
+├‣  Kanal: ${selectedField.channelLink || `https://t.me/${selectedField.channelId?.replace('@', '').replace('-100', '')}`}
 ╰────────────────────
-▶️ Serialning to'liq qismlarini https://t.me/${this.grammyBot.botUsername}?start=s${code} dan tomosha qilishingiz mumkin!
+▶️ Serialning to'liq qismlarini @${botUsername} dan tomosha qilishingiz mumkin!
         `.trim();
 
         const keyboard = new InlineKeyboard().url(

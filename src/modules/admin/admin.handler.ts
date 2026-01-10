@@ -767,15 +767,17 @@ export class AdminHandler implements OnModuleInit {
         try {
           // Get field info for database channel caption
           const field = data.selectedField;
+          const botInfo = await ctx.api.getMe();
+          const botUsername = botInfo.username || 'bot';
           const dbCaption = `
 ╭────────────────────
-├‣  Kino nomi: ${data.title}
+├‣  Kino nomi : ${data.title}
 ├‣  Kino kodi: ${data.code}
 ├‣  Qism: ${data.episodeCount || 1}
 ├‣  Janrlari: ${data.genre}
-├‣  Kanal: ${field.channelLink || '@' + field.name}
+├‣  Kanal: ${field.channelLink || `https://t.me/${field.channelId?.replace('@', '').replace('-100', '')}`}
 ╰────────────────────
-▶️ Kinoning to'liq qismini https://t.me/${this.grammyBot.botUsername}?start=${data.code} dan tomosha qilishingiz mumkin!
+▶️ Kinoning to'liq qismini @${botUsername} dan tomosha qilishingiz mumkin!
           `.trim();
 
           const sentVideo = await ctx.api.sendVideo(
@@ -806,6 +808,8 @@ export class AdminHandler implements OnModuleInit {
 
       // Get field info first
       const field = data.selectedField;
+      const botInfo = await ctx.api.getMe();
+      const botUsername = botInfo.username || 'bot';
 
       // Create movie caption with button for field channel (DMC style)
       const caption = `
@@ -814,9 +818,9 @@ export class AdminHandler implements OnModuleInit {
 ├‣  Kino kodi: ${data.code}
 ├‣  Qism: ${data.episodeCount || 1}
 ├‣  Janrlari: ${data.genre}
-├‣  Kanal: ${field.channelLink || '@' + field.name}
+├‣  Kanal: ${field.channelLink || `https://t.me/${field.channelId?.replace('@', '').replace('-100', '')}`}
 ╰────────────────────
-▶️ Kinoning to'liq qismini https://t.me/${this.grammyBot.botUsername}?start=${data.code} dan tomosha qilishingiz mumkin!
+▶️ Kinoning to'liq qismini @${botUsername} dan tomosha qilishingiz mumkin!
       `.trim();
 
       const keyboard = new InlineKeyboard().url(

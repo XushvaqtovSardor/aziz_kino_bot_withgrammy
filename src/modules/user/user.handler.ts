@@ -154,7 +154,6 @@ export class UserHandler implements OnModuleInit {
     if (user.isBlocked) {
       await ctx.reply(
         '🚫 Siz botdan foydalanish huquqidan mahrum etilgansiz.\n\n' +
-          `Sabab: ${user.blockReason || 'Admin tomonidan bloklangan'}\n` +
           `Sana: ${user.blockedAt?.toLocaleString('uz-UZ') || "Noma'lum"}`,
       );
       return;
@@ -986,7 +985,7 @@ Savollaringiz bo'lsa murojaat qiling:
       const caption = `
 ╭────────────────────
 ├‣  Serial nomi : ${serial.title}
-├‣  Serial kodi: s${serial.code}
+├‣  Serial kodi: ${serial.code}
 ├‣  Qism: ${episodes.length}
 ├‣  Janrlari: ${serial.genre || "Noma'lum"}
 ├‣  Kanal: ${field?.channelLink || '@' + (field?.name || 'Kanal')}
@@ -1363,7 +1362,7 @@ Savollaringiz bo'lsa murojaat qiling:
       const videoCaption = `
 ╭────────────────────
 ├‣  Serial nomi : ${serial.title}
-├‣  Serial kodi: s${serial.code}
+├‣  Serial kodi: ${serial.code}
 ├‣  Qism: ${episodeNumber}
 ├‣  Janrlari: ${serial.genre || "Noma'lum"}
 ├‣  Kanal: ${field?.channelLink || '@' + (field?.name || 'Kanal')}
@@ -1533,35 +1532,29 @@ Savollaringiz bo'lsa murojaat qiling:
     const fieldId = parseInt(
       ctx.callbackQuery.data.replace('field_channel_', ''),
     );
-    await ctx.answerCallbackQuery();
 
     try {
       const field = await this.fieldService.findOne(fieldId);
       if (!field) {
-        await ctx.reply('❌ Field topilmadi.');
+        await ctx.answerCallbackQuery({
+          text: '❌ Field topilmadi.',
+          show_alert: true,
+        });
         return;
       }
 
-      const keyboard = new InlineKeyboard()
-        .url(
-          "📢 Kanalga o'tish",
-          field.channelLink || `https://t.me/${field.channelId}`,
-        )
-        .row()
-        .text('🔙 Orqaga', 'back_to_main');
+      // Directly open the channel link
+      const channelUrl = field.channelLink || `https://t.me/${field.channelId}`;
 
-      await ctx.reply(
-        `📁 **${field.name}**\n\n` +
-          `Kanalga o'ting va kino rasmlarini ko'ring.\n` +
-          `Rasm tagidagi "Tomosha qilish" tugmasini bosing.`,
-        {
-          parse_mode: 'Markdown',
-          reply_markup: keyboard,
-        },
-      );
+      await ctx.answerCallbackQuery({
+        url: channelUrl,
+      });
     } catch (error) {
       this.logger.error('Error handling field channel callback:', error);
-      await ctx.reply('❌ Xatolik yuz berdi.');
+      await ctx.answerCallbackQuery({
+        text: '❌ Xatolik yuz berdi.',
+        show_alert: true,
+      });
     }
   }
 
