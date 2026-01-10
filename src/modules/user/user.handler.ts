@@ -1073,53 +1073,28 @@ Savollaringiz bo'lsa murojaat qiling:
     // Show ALL unsubscribed channels at once
     let message = `❌ Botdan foydalanish uchun quyidagi kanallarga obuna bo'lishingiz yoki so'rov yuborishingiz kerak:\n\n`;
 
-    // Count telegram and external channels
-    const telegramChannels = status.unsubscribedChannels.filter(
-      (ch) => !ch.isExternal,
-    );
-    const externalChannels = status.unsubscribedChannels.filter(
-      (ch) => ch.isExternal,
-    );
-    //📱 <b>Telegram kanallar</b>
-    if (telegramChannels.length > 0) {
-      message += `(${telegramChannels.length}):\n`;
-      telegramChannels.forEach(() => {
-        // const channelTypeEmoji =
-        //   channel.type === 'PUBLIC'
-        //     ? '🔓'
-        //     : channel.type === 'PRIVATE'
-        //       ? '🔐'
-        //       : '🔒';
-        // message += `${index + 1}.  ${channel.channelName}\n`;
-        message += '';
-      });
-      message += '';
-    }
-
-    if (externalChannels.length > 0) {
-      // message += ` <b>Tashqi sahifalar</b> (${externalChannels.length}):\n`;
-      // externalChannels.forEach((channel, index) => {
-      //   message += `${index + 1}. 🔗 ${channel.channelName}\n`;
-      // });
-      message += '';
-    }
-    message += `<blockquote>💎 Premium obuna sotib olib, kanallarga obuna bo'lmasdan foydalanishingiz mumkin.</blockquote>`;
-
-    const keyboard = new InlineKeyboard();
-
-    // Add all channel buttons
-    status.unsubscribedChannels.forEach((channel) => {
-      // const emoji = channel.isExternal ? '🌐' : '📱';
-      keyboard.url(` ${channel.channelName}`, channel.channelLink).row();
+    // List each unsubscribed channel with number
+    status.unsubscribedChannels.forEach((channel, index) => {
+      message += `(${index + 1}):\n`;
+      message += `<blockquote>${channel.channelName}</blockquote>\n`;
     });
 
-    keyboard.text('✅ Tekshirish', 'check_subscription').row();
-    keyboard.text('💎 Premium sotib olish', 'show_premium');
+    message += `\n💎 Premium obuna sotib olib, kanallarga obuna bo'lmasdan foydalanishingiz mumkin.`;
 
     // Add content code if provided
     if (contentCode && contentType) {
       message += `\n🎬 Kino kodi: <b>${contentCode}</b>`;
     }
+
+    const keyboard = new InlineKeyboard();
+
+    // Add all channel buttons
+    status.unsubscribedChannels.forEach((channel) => {
+      keyboard.url(channel.channelName, channel.channelLink).row();
+    });
+
+    keyboard.text('✅ Tekshirish', 'check_subscription').row();
+    keyboard.text('💎 Premium sotib olish', 'show_premium');
 
     await ctx.reply(message, {
       parse_mode: 'HTML',
