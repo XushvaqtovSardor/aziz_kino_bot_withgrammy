@@ -38,6 +38,16 @@ export class PaymentService {
     });
   }
 
+  async findByStatus(status: PaymentStatus) {
+    return this.prisma.payment.findMany({
+      where: { status },
+      include: {
+        user: true,
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
   async findById(id: number) {
     return this.prisma.payment.findUnique({
       where: { id },

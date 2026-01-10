@@ -81,7 +81,7 @@ export class AdminService {
 
   async listAdmins() {
     return this.prisma.admin.findMany({
-      orderBy: { createdAt: 'desc' },
+      orderBy: [{ createdAt: 'desc' }],
     });
   }
 

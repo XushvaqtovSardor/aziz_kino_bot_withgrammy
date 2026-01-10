@@ -58,9 +58,9 @@ export class AdminKeyboard {
       .text('❌ Rad etilgan')
       .text("📊 To'lov statistikasi")
       .row()
-      .text('� Premium banned users')
+      .text('🚫 Premium banned users')
       .row()
-      .text('�🔙 Orqaga');
+      .text('🔙 Orqaga');
     return { reply_markup: keyboard.resized() };
   }
 

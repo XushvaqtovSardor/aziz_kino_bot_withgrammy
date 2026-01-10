@@ -153,11 +153,23 @@ export class AdminHandler implements OnModuleInit {
       this.withAdminCheck(this.showPendingPayments.bind(this)),
     );
     bot.hears(
-      '� Premium banned users',
+      '✅ Tasdiqlangan',
+      this.withAdminCheck(this.showApprovedPayments.bind(this)),
+    );
+    bot.hears(
+      '❌ Rad etilgan',
+      this.withAdminCheck(this.showRejectedPayments.bind(this)),
+    );
+    bot.hears(
+      "📊 To'lov statistikasi",
+      this.withAdminCheck(this.showPaymentStatistics.bind(this)),
+    );
+    bot.hears(
+      '🚫 Premium banned users',
       this.withAdminCheck(this.showPremiumBannedUsersMenu.bind(this)),
     );
     bot.hears(
-      '�👥 Adminlar',
+      '👥 Adminlar',
       this.withAdminCheck(this.showAdminsList.bind(this)),
     );
     bot.hears(
@@ -179,6 +191,10 @@ export class AdminHandler implements OnModuleInit {
     bot.hears(
       '🚫 Foydalanuvchini bloklash',
       this.withAdminCheck(this.startBlockUser.bind(this)),
+    );
+    bot.hears(
+      '✅ Blokdan ochish',
+      this.withAdminCheck(this.startUnblockUser.bind(this)),
     );
     bot.hears(
       "👥 Hamma userlarni ko'rish",
@@ -298,6 +314,26 @@ export class AdminHandler implements OnModuleInit {
         await ctx.answerCallbackQuery('❌ Bekor qilindi');
         await ctx.reply(
           '❌ Bloklash bekor qilindi',
+          AdminKeyboard.getAdminMainMenu(admin.role),
+        );
+      }
+    });
+
+    bot.callbackQuery(/^confirm_unblock_user_(\d+)$/, async (ctx) => {
+      const admin = await this.getAdmin(ctx);
+      if (admin) await this.confirmUnblockUser(ctx);
+    });
+
+    bot.callbackQuery('cancel_unblock_user', async (ctx) => {
+      const admin = await this.getAdmin(ctx);
+      if (admin) {
+        this.sessionService.clearSession(ctx.from.id);
+        await ctx.editMessageReplyMarkup({
+          reply_markup: { inline_keyboard: [] },
+        });
+        await ctx.answerCallbackQuery('❌ Bekor qilindi');
+        await ctx.reply(
+          '❌ Blokdan ochish bekor qilindi',
           AdminKeyboard.getAdminMainMenu(admin.role),
         );
       }
@@ -507,6 +543,7 @@ export class AdminHandler implements OnModuleInit {
         .text('👥 Barcha foydalanuvchilar')
         .row()
         .text('🚫 Foydalanuvchini bloklash')
+        .text('✅ Blokdan ochish')
         .row()
         .text('🔙 Orqaga')
         .resized();
@@ -837,6 +874,9 @@ export class AdminHandler implements OnModuleInit {
         break;
       case AdminState.BLOCK_USER:
         await this.handleBlockUserSteps(ctx, text, session);
+        break;
+      case AdminState.UNBLOCK_USER:
+        await this.handleUnblockUserSteps(ctx, text, session);
         break;
       case AdminState.UNBAN_PREMIUM_USER:
         await this.handleUnbanPremiumUserSteps(ctx, text, session);
@@ -1618,6 +1658,74 @@ export class AdminHandler implements OnModuleInit {
     }
   }
 
+  private async showApprovedPayments(ctx: BotContext) {
+    const admin = await this.getAdmin(ctx);
+    if (!admin) return;
+
+    const payments = await this.paymentService.findByStatus('APPROVED');
+    if (payments.length === 0) {
+      await ctx.reply("✅ Tasdiqlangan to'lovlar yo'q.");
+      return;
+    }
+
+    let message = "✅ **Tasdiqlangan to'lovlar:**\n\n";
+    payments.slice(0, 20).forEach((payment, index) => {
+      message += `${index + 1}. 👤 ${payment.user.firstName || 'N/A'}\n`;
+      message += `   💰 ${payment.amount} ${payment.currency}\n`;
+      message += `   📅 ${payment.createdAt.toLocaleDateString('uz-UZ')}\n\n`;
+    });
+
+    if (payments.length > 20) {
+      message += `\n... va yana ${payments.length - 20} ta`;
+    }
+
+    await ctx.reply(message, { parse_mode: 'Markdown' });
+  }
+
+  private async showRejectedPayments(ctx: BotContext) {
+    const admin = await this.getAdmin(ctx);
+    if (!admin) return;
+
+    const payments = await this.paymentService.findByStatus('REJECTED');
+    if (payments.length === 0) {
+      await ctx.reply("❌ Rad etilgan to'lovlar yo'q.");
+      return;
+    }
+
+    let message = "❌ **Rad etilgan to'lovlar:**\n\n";
+    payments.slice(0, 20).forEach((payment, index) => {
+      message += `${index + 1}. 👤 ${payment.user.firstName || 'N/A'}\n`;
+      message += `   💰 ${payment.amount} ${payment.currency}\n`;
+      message += `   📅 ${payment.createdAt.toLocaleDateString('uz-UZ')}\n\n`;
+    });
+
+    if (payments.length > 20) {
+      message += `\n... va yana ${payments.length - 20} ta`;
+    }
+
+    await ctx.reply(message, { parse_mode: 'Markdown' });
+  }
+
+  private async showPaymentStatistics(ctx: BotContext) {
+    const admin = await this.getAdmin(ctx);
+    if (!admin) return;
+
+    const stats = await this.paymentService.getStatistics();
+
+    const message = `
+📊 **To'lovlar statistikasi**
+
+📦 Jami to'lovlar: ${stats.totalPayments}
+✅ Tasdiqlangan: ${stats.approvedCount}
+❌ Rad etilgan: ${stats.rejectedCount}
+⏳ Kutilmoqda: ${stats.pendingCount}
+
+💰 Jami summa: ${stats.totalRevenue || 0} UZS
+    `.trim();
+
+    await ctx.reply(message, { parse_mode: 'Markdown' });
+  }
+
   private async approvePayment(ctx: BotContext) {
     const admin = await this.getAdmin(ctx);
     if (!admin || !ctx.from) return;
@@ -1706,28 +1814,50 @@ export class AdminHandler implements OnModuleInit {
       return;
     }
 
-    const admins = await this.adminService.findAll();
-    let message = '👥 Adminlar royxati:\n\n';
-    admins.forEach((a, i) => {
-      message += `${i + 1}. @${a.username || 'N/A'}\n`;
-      message += `   Rol: ${a.role}\n`;
-      message += `   ID: ${a.telegramId}\n\n`;
-    });
+    try {
+      const admins = await this.adminService.findAll();
+      let message = '👥 **Adminlar royxati:**\n\n';
 
-    const keyboard = new InlineKeyboard();
-    admins
-      .filter((a) => a.role !== 'SUPERADMIN')
-      .forEach((a) => {
-        keyboard
-          .text(
-            `🗑 ${a.username || a.telegramId}`,
-            `delete_admin_${a.telegramId}`,
-          )
-          .row();
+      if (admins.length === 0) {
+        message += "Hozircha adminlar yo'q.\n\n";
+      } else {
+        admins.forEach((a, i) => {
+          const roleEmoji =
+            a.role === 'SUPERADMIN' ? '👑' : a.role === 'MANAGER' ? '👨‍💼' : '👥';
+          message += `${i + 1}. ${roleEmoji} @${a.username || 'N/A'}\n`;
+          message += `   📋 Rol: ${a.role}\n`;
+          message += `   🆔 ID: \`${a.telegramId}\`\n\n`;
+        });
+      }
+
+      const keyboard = new InlineKeyboard();
+      const deletableAdmins = admins.filter((a) => a.role !== 'SUPERADMIN');
+
+      if (deletableAdmins.length > 0) {
+        deletableAdmins.forEach((a) => {
+          keyboard
+            .text(
+              `🗑 ${a.username || a.telegramId}`,
+              `delete_admin_${a.telegramId}`,
+            )
+            .row();
+        });
+      }
+
+      keyboard.text("➕ Admin qo'shish", 'add_new_admin').row();
+      keyboard.text('🔙 Orqaga', 'back_to_admin_menu');
+
+      await ctx.reply(message, {
+        parse_mode: 'Markdown',
+        reply_markup: keyboard,
       });
-    keyboard.text("➕ Admin qo'shish", 'add_new_admin');
-
-    await ctx.reply(message, { reply_markup: keyboard });
+    } catch (error) {
+      this.logger.error('Error showing admins list:', error);
+      await ctx.reply(
+        "❌ Adminlar royxatini ko'rsatishda xatolik yuz berdi.\n\n" +
+          "Iltimos, qayta urinib ko'ring.",
+      );
+    }
   }
 
   private async startAddingAdmin(ctx: BotContext) {
@@ -1763,11 +1893,36 @@ export class AdminHandler implements OnModuleInit {
       return;
     }
 
-    const adminTelegramId = ctx.match![1] as string;
-    await this.adminService.deleteAdmin(adminTelegramId);
+    try {
+      const adminTelegramId = ctx.match![1] as string;
 
-    await ctx.answerCallbackQuery({ text: '✅ Admin ochirildi' });
-    await this.showAdminsList(ctx);
+      // Check if trying to delete themselves
+      if (adminTelegramId === ctx.from?.id.toString()) {
+        await ctx.answerCallbackQuery({
+          text: "❌ O'zingizni o'chira olmaysiz!",
+          show_alert: true,
+        });
+        return;
+      }
+
+      await this.adminService.deleteAdmin(adminTelegramId);
+
+      await ctx.answerCallbackQuery({ text: '✅ Admin ochirildi' });
+
+      // Edit the current message to remove the deleted admin
+      await ctx.editMessageText('✅ Admin muvaffaqiyatli ochirildi!');
+
+      // Show updated admin list
+      setTimeout(() => {
+        this.showAdminsList(ctx);
+      }, 1000);
+    } catch (error) {
+      this.logger.error('Error deleting admin:', error);
+      await ctx.answerCallbackQuery({
+        text: "❌ Admin o'chirishda xatolik yuz berdi.",
+        show_alert: true,
+      });
+    }
   }
 
   private async handleRoleSelection(ctx: BotContext) {
@@ -3789,7 +3944,18 @@ ${existingSerial.description || ''}
       // Get all users with pagination
       const users = await this.prisma.user.findMany({
         take: 50, // Show first 50 users
-        orderBy: { createdAt: 'desc' },
+        orderBy: [{ createdAt: 'desc' }],
+        select: {
+          id: true,
+          telegramId: true,
+          username: true,
+          firstName: true,
+          lastName: true,
+          isPremium: true,
+          isBlocked: true,
+          hasTelegramPremium: true,
+          createdAt: true,
+        },
       });
 
       if (users.length === 0) {
@@ -3813,6 +3979,11 @@ ${existingSerial.description || ''}
       await ctx.reply(message, { parse_mode: 'Markdown' });
     } catch (error) {
       this.logger.error('Error showing all users:', error);
+      this.logger.error('Error details:', {
+        message: error?.message,
+        stack: error?.stack,
+        code: error?.code,
+      });
       await ctx.reply('❌ Xatolik yuz berdi.');
     }
   }
@@ -3965,7 +4136,173 @@ ${existingSerial.description || ''}
       );
     } catch (error) {
       this.logger.error('Error confirming block user:', error);
+      this.logger.error('Error details:', {
+        message: error?.message,
+        stack: error?.stack,
+        code: error?.code,
+      });
+      await ctx.reply("❌ Xatolik yuz berdi. Admin bilan bog'laning.");
+      this.sessionService.clearSession(ctx.from.id);
+    }
+  }
+
+  // ==================== UNBLOCK USER ====================
+  private async startUnblockUser(ctx: BotContext) {
+    try {
+      const admin = await this.getAdmin(ctx);
+      if (!admin) return;
+
+      // Start session
+      this.sessionService.startSession(ctx.from!.id, AdminState.UNBLOCK_USER);
+      this.sessionService.updateSessionData(ctx.from!.id, {});
+
+      await ctx.reply(
+        '✅ **Foydalanuvchini blokdan ochish**\n\n' +
+          "Blokdan ochish uchun foydalanuvchining username'ini kiriting:\n" +
+          '(@ belgisi bilan yoki belgisisiz)\n\n' +
+          'Masalan: @username yoki username',
+        {
+          parse_mode: 'Markdown',
+          reply_markup: {
+            keyboard: [[{ text: '❌ Bekor qilish' }]],
+            resize_keyboard: true,
+          },
+        },
+      );
+    } catch (error) {
+      this.logger.error('Error starting unblock user:', error);
       await ctx.reply('❌ Xatolik yuz berdi.');
+    }
+  }
+
+  private async handleUnblockUserSteps(ctx: any, text: string, session: any) {
+    try {
+      // Check for cancel
+      if (text === '❌ Bekor qilish') {
+        this.sessionService.clearSession(ctx.from.id);
+        const admin = await this.adminService.getAdminByTelegramId(ctx.from.id);
+        await ctx.reply(
+          '❌ Bekor qilindi',
+          AdminKeyboard.getAdminMainMenu(admin?.role || 'ADMIN'),
+        );
+        return;
+      }
+
+      // Parse username (remove @ if exists)
+      const username = text.startsWith('@') ? text.substring(1) : text;
+
+      // Find user by username
+      const user = await this.prisma.user.findFirst({
+        where: { username: username },
+      });
+
+      if (!user) {
+        await ctx.reply(
+          '❌ Foydalanuvchi topilmadi!\n\n' +
+            "Iltimos, to'g'ri username kiriting:",
+        );
+        return;
+      }
+
+      // Check if not blocked
+      if (!user.isBlocked) {
+        await ctx.reply(
+          `⚠️ Bu foydalanuvchi bloklanmagan!\n\n` +
+            `👤 Ism: ${user.firstName || "Noma'lum"}\n` +
+            `📝 Username: @${user.username}\n` +
+            `✅ Holati: Faol`,
+        );
+        this.sessionService.clearSession(ctx.from.id);
+        return;
+      }
+
+      // Show confirmation
+      await ctx.reply(
+        `⚠️ **Tasdiqlash**\n\n` +
+          `Haqiqatdan ham quyidagi foydalanuvchini blokdan ochasizmi?\n\n` +
+          `👤 Ism: ${user.firstName || "Noma'lum"}\n` +
+          `📝 Username: @${user.username}\n` +
+          `🆔 Telegram ID: \`${user.telegramId}\`\n` +
+          `🚫 Bloklangan: ${user.blockedAt?.toLocaleString('uz-UZ') || "Noma'lum"}\n` +
+          `📝 Sabab: ${user.blockReason || "Noma'lum"}\n\n` +
+          `Bu foydalanuvchi qayta botdan foydalana oladi!`,
+        {
+          parse_mode: 'Markdown',
+          reply_markup: {
+            inline_keyboard: [
+              [
+                {
+                  text: '✅ Ha, ochish',
+                  callback_data: `confirm_unblock_user_${user.id}`,
+                },
+                {
+                  text: "❌ Yo'q",
+                  callback_data: 'cancel_unblock_user',
+                },
+              ],
+            ],
+          },
+        },
+      );
+
+      // Save user ID to session
+      this.sessionService.updateSession(ctx.from.id, {
+        state: AdminState.UNBLOCK_USER,
+        data: { userId: user.id, username: user.username },
+      });
+    } catch (error) {
+      this.logger.error('Error handling unblock user steps:', error);
+      await ctx.reply("❌ Xatolik yuz berdi. Qaytadan urinib ko'ring.");
+      this.sessionService.clearSession(ctx.from.id);
+    }
+  }
+
+  private async confirmUnblockUser(ctx: any) {
+    try {
+      await ctx.answerCallbackQuery();
+
+      // Get session data
+      const session = this.sessionService.getSession(ctx.from.id);
+      if (!session || !session.data || !session.data.userId) {
+        await ctx.reply("❌ Ma'lumot topilmadi. Qaytadan urinib ko'ring.");
+        return;
+      }
+
+      const { userId, username } = session.data;
+
+      // Unblock user
+      const user = await this.prisma.user.update({
+        where: { id: userId },
+        data: {
+          isBlocked: false,
+          blockedAt: null,
+          blockReason: null,
+        },
+      });
+
+      // Clear session
+      this.sessionService.clearSession(ctx.from.id);
+
+      // Edit message to remove buttons
+      await ctx.editMessageReplyMarkup({ inline_keyboard: [] });
+
+      const admin = await this.adminService.getAdminByTelegramId(ctx.from.id);
+      await ctx.reply(
+        `✅ Foydalanuvchi blokdan ochildi!\n\n` +
+          `👤 Ism: ${user.firstName || "Noma'lum"}\n` +
+          `📝 Username: @${username}\n` +
+          `✅ Holati: Faol\n` +
+          `📅 Sana: ${new Date().toLocaleString('uz-UZ')}`,
+        AdminKeyboard.getAdminMainMenu(admin?.role || 'ADMIN'),
+      );
+    } catch (error) {
+      this.logger.error('Error confirming unblock user:', error);
+      this.logger.error('Error details:', {
+        message: error?.message,
+        stack: error?.stack,
+        code: error?.code,
+      });
+      await ctx.reply("❌ Xatolik yuz berdi. Admin bilan bog'laning.");
       this.sessionService.clearSession(ctx.from.id);
     }
   }

@@ -268,15 +268,27 @@ export class SerialManagementService {
 
       // Upload all episode videos to database channels
       const episodeData = [];
+      const botInfo = await ctx.api.getMe();
+      const botUsername = botInfo.username;
+
       for (const ep of episodes) {
         const videoMessages = [];
         for (const dbChannel of dbChannels) {
           try {
+            const caption = `╭────────────────────
+├‣  Serial nomi: ${title}
+├‣  Serial kodi: ${code}
+├‣  Qism: ${ep.episodeNumber}
+├‣  Janrlari: ${genre}
+├‣  Kanal: ${dbChannel.channelLink || 'https://t.me/' + dbChannel.channelName}
+╰────────────────────
+▶️ Serialning to'liq qismini https://t.me/${botUsername}?start=s${code} dan tomosha qilishingiz mumkin!`;
+
             const sentVideo = await ctx.api.sendVideo(
               dbChannel.channelId,
               ep.videoFileId,
               {
-                caption: `📺 ${title}\n📹 ${ep.episodeNumber}-qism\n🆔 Kod: ${code}`,
+                caption,
               },
             );
             videoMessages.push({
@@ -479,6 +491,8 @@ export class SerialManagementService {
 
       // Get database channels
       const dbChannels = await this.channelService.findAllDatabase();
+      const botInfo = await ctx.api.getMe();
+      const botUsername = botInfo.username;
 
       if (contentType === 'movie') {
         // Upload movie episodes
@@ -486,11 +500,20 @@ export class SerialManagementService {
           const videoMessages = [];
           for (const dbChannel of dbChannels) {
             try {
+              const caption = `╭────────────────────
+├‣  Kino nomi: ${movie.title}
+├‣  Kino kodi: ${movie.code}
+├‣  Qism: ${ep.episodeNumber}
+├‣  Janrlari: ${movie.genre}
+├‣  Kanal: ${dbChannel.channelLink || 'https://t.me/' + dbChannel.channelName}
+╰────────────────────
+▶️ Kinoning to'liq qismini https://t.me/${botUsername}?start=${movie.code} dan tomosha qilishingiz mumkin!`;
+
               const sentVideo = await ctx.api.sendVideo(
                 dbChannel.channelId,
                 ep.videoFileId,
                 {
-                  caption: `🎬 ${movie.title}\n📹 ${ep.episodeNumber}-qism\n🆔 Kod: ${movie.code}`,
+                  caption,
                 },
               );
               videoMessages.push({
@@ -525,11 +548,20 @@ export class SerialManagementService {
           const videoMessages = [];
           for (const dbChannel of dbChannels) {
             try {
+              const caption = `╭────────────────────
+├‣  Serial nomi: ${serial.title}
+├‣  Serial kodi: ${serial.code}
+├‣  Qism: ${ep.episodeNumber}
+├‣  Janrlari: ${serial.genre}
+├‣  Kanal: ${dbChannel.channelLink || 'https://t.me/' + dbChannel.channelName}
+╰────────────────────
+▶️ Serialning to'liq qismini https://t.me/${botUsername}?start=s${serial.code} dan tomosha qilishingiz mumkin!`;
+
               const sentVideo = await ctx.api.sendVideo(
                 dbChannel.channelId,
                 ep.videoFileId,
                 {
-                  caption: `📺 ${serial.title}\n📹 ${ep.episodeNumber}-qism\n🆔 Kod: ${serial.code}`,
+                  caption,
                 },
               );
               videoMessages.push({
@@ -565,11 +597,13 @@ export class SerialManagementService {
             const allEpisodes = await this.movieEpisodeService.findByMovieId(
               movie.id,
             );
+            // Movie has 1 original video + additional episodes
+            const totalEpisodes = 1 + allEpisodes.length;
             const caption = `
 ╭────────────────────
-├‣  Kino nomi : ${movie.title}
-├‣  Kino kodi: ${movie.code}
-├‣  Qismlar: ${allEpisodes.length}
+├⁣  Kino nomi : ${movie.title}
+├⁣  Kino kodi: ${movie.code}
+├⁣  Qismlar: ${totalEpisodes}
 ├‣  Janrlari: ${movie.genre}
 ├‣  Kanal: ${field.channelLink || '@' + field.name}
 ╰────────────────────
@@ -644,10 +678,12 @@ export class SerialManagementService {
         const allEpisodes = await this.movieEpisodeService.findByMovieId(
           movie.id,
         );
+        // Movie has 1 original video + additional episodes
+        const totalEpisodes = 1 + allEpisodes.length;
         await ctx.reply(
           `✅ Qismlar muvaffaqiyatli qo'shildi!\n\n` +
             `🎬 ${movie.title}\n` +
-            `📹 Jami qismlar: ${allEpisodes.length}\n` +
+            `📹 Jami qismlar: ${totalEpisodes}\n` +
             `➕ Qo'shildi: ${addedEpisodes.length} ta`,
           AdminKeyboard.getAdminMainMenu('ADMIN'),
         );

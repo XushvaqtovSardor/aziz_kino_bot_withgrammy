@@ -227,20 +227,11 @@ export class UserHandler implements OnModuleInit {
   private async handleSearch(ctx: BotContext) {
     if (!ctx.from) return;
 
-    const user = await this.userService.findByTelegramId(String(ctx.from.id));
-    const isPremium = user?.isPremium || false;
-    const isPremiumBanned = user?.isPremiumBanned || false;
-
     await ctx.reply(
       '🔍 **Qidirish**\n\n' +
         'Kino yoki serial kodini kiriting:\n' +
         'Masalan: 12345',
       { parse_mode: 'Markdown' },
-    );
-
-    await ctx.reply(
-      'Asosiy menyuga qaytish uchun:',
-      MainMenuKeyboard.getMainMenuWithBack(isPremium, isPremiumBanned),
     );
   }
 
@@ -505,7 +496,9 @@ To'lov qilgandan keyin chekni botga yuboring.
     const keyboard = new InlineKeyboard()
       .url("💳 Payme orqali to'lash", paymeUrl)
       .row()
-      .text('📸 Chek yuborish', 'upload_receipt');
+      .text('📸 Chek yuborish', 'upload_receipt')
+      .row()
+      .text('🔙 Orqaga', 'show_premium');
 
     await ctx.reply(message, {
       parse_mode: 'Markdown',
