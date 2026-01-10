@@ -4850,9 +4850,8 @@ Qaysi rol berasiz?
 
     await ctx.reply(
       "🗑️ **Kontent o'chirish**\n\n" +
-        'Quyidagi formatda kino yoki serial kodini yuboring:\n\n' +
-        '🎬 Kino: `m100` yoki `M100`\n' +
-        '📺 Serial: `s200` yoki `S200`\n\n' +
+        '🔢 Kino yoki serial kodini kiriting:\n\n' +
+        '**Misol:** 100, 200, 350\n\n' +
         '⚠️ **Ogohlantirish:**\n' +
         '• Bu amal qaytarilmaydi!\n' +
         "• Barcha qismlar va tarix o'chiriladi\n" +
@@ -4868,27 +4867,35 @@ Qaysi rol berasiz?
     const text = ctx.message?.text?.trim();
     if (!text) return;
 
-    // Parse code: m100 or s200
-    const movieMatch = text.match(/^m(\d+)$/i);
-    const serialMatch = text.match(/^s(\d+)$/i);
+    // Parse code: just a number
+    const codeMatch = text.match(/^(\d+)$/);
 
-    if (!movieMatch && !serialMatch) {
+    if (!codeMatch) {
       await ctx.reply(
-        "❌ Noto'g'ri format!\n\n" +
-          "To'g'ri format:\n" +
-          '🎬 Kino: m100\n' +
-          '📺 Serial: s200',
+        "❌ Noto'g'ri format!\n\n" + 'Faqat raqam kiriting, masalan: 100, 200',
       );
       return;
     }
 
+    const code = codeMatch[1];
+
     try {
-      if (movieMatch) {
-        const code = movieMatch[1];
+      // Check if movie exists
+      const movie = await this.prisma.movie.findUnique({
+        where: { code: parseInt(code) },
+      });
+
+      // Check if serial exists
+      const serial = await this.prisma.serial.findUnique({
+        where: { code: parseInt(code) },
+      });
+
+      if (movie) {
         await this.deleteMovieByCode(ctx, code);
-      } else if (serialMatch) {
-        const code = serialMatch[1];
+      } else if (serial) {
         await this.deleteSerialByCode(ctx, code);
+      } else {
+        await ctx.reply(`❌ ${code} kodli kontent topilmadi!`);
       }
     } catch (error) {
       this.logger.error('Error deleting content:', error);
