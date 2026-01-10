@@ -204,6 +204,10 @@ export class AdminHandler implements OnModuleInit {
       '🔍 Qidirish',
       this.withAdminCheck(this.startSearchPremiumBannedUser.bind(this)),
     );
+    bot.hears(
+      "💳 To'lovlar menyusiga qaytish",
+      this.withAdminCheck(this.showPaymentsMenu.bind(this)),
+    );
 
     // Callback query handlers - all with admin check
     bot.callbackQuery(/^field_detail_(\d+)$/, async (ctx) => {
@@ -1621,6 +1625,11 @@ export class AdminHandler implements OnModuleInit {
     const admin = await this.getAdmin(ctx);
     if (!admin) return;
 
+    // Clear any existing session to mark we're in payment menu
+    if (ctx.from) {
+      this.sessionService.clearSession(ctx.from.id);
+    }
+
     await ctx.reply(
       "💳 To'lovlar bo'limi",
       AdminKeyboard.getPaymentManagementMenu(),
@@ -1824,20 +1833,49 @@ export class AdminHandler implements OnModuleInit {
         admins.forEach((a, i) => {
           const roleEmoji =
             a.role === 'SUPERADMIN' ? '👑' : a.role === 'MANAGER' ? '👨‍💼' : '👥';
-          message += `${i + 1}. ${roleEmoji} @${a.username || 'N/A'}\n`;
+
+          // Show who created this admin
+          const creatorInfo =
+            a.createdBy === ctx.from?.id.toString()
+              ? ' (✅ Siz yaratdingiz)'
+              : '';
+
+          message += `${i + 1}. ${roleEmoji} @${a.username || 'N/A'}${creatorInfo}\n`;
           message += `   📋 Rol: ${a.role}\n`;
-          message += `   🆔 ID: \`${a.telegramId}\`\n\n`;
+          message += `   🆔 ID: \`${a.telegramId}\`\n`;
+          message += `   📅 Qo'shilgan: ${a.createdAt.toLocaleDateString('uz-UZ')}\n\n`;
         });
       }
 
       const keyboard = new InlineKeyboard();
-      const deletableAdmins = admins.filter((a) => a.role !== 'SUPERADMIN');
+
+      // Only show delete button for admins that:
+      // 1. Were created by current admin (createdBy matches)
+      // 2. OR were created after current admin (createdAt is later)
+      const currentAdmin = await this.adminService.getAdminByTelegramId(
+        ctx.from!.id.toString(),
+      );
+
+      const deletableAdmins = admins.filter((a) => {
+        // Can't delete yourself
+        if (a.telegramId === ctx.from?.id.toString()) return false;
+
+        // Can delete if you created this admin
+        if (a.createdBy === ctx.from?.id.toString()) return true;
+
+        // Can delete if this admin was created after you
+        if (currentAdmin && a.createdAt > currentAdmin.createdAt) return true;
+
+        return false;
+      });
 
       if (deletableAdmins.length > 0) {
         deletableAdmins.forEach((a) => {
+          const roleEmoji =
+            a.role === 'SUPERADMIN' ? '👑' : a.role === 'MANAGER' ? '👨‍💼' : '👥';
           keyboard
             .text(
-              `🗑 ${a.username || a.telegramId}`,
+              `🗑 ${roleEmoji} ${a.username || a.telegramId}`,
               `delete_admin_${a.telegramId}`,
             )
             .row();
@@ -1900,6 +1938,46 @@ export class AdminHandler implements OnModuleInit {
       if (adminTelegramId === ctx.from?.id.toString()) {
         await ctx.answerCallbackQuery({
           text: "❌ O'zingizni o'chira olmaysiz!",
+          show_alert: true,
+        });
+        return;
+      }
+
+      // Get the admin to be deleted
+      const adminToDelete =
+        await this.adminService.getAdminByTelegramId(adminTelegramId);
+
+      if (!adminToDelete) {
+        await ctx.answerCallbackQuery({
+          text: '❌ Admin topilmadi.',
+          show_alert: true,
+        });
+        return;
+      }
+
+      // Get current admin details
+      const currentAdmin = await this.adminService.getAdminByTelegramId(
+        ctx.from!.id.toString(),
+      );
+
+      if (!currentAdmin) {
+        await ctx.answerCallbackQuery({
+          text: '❌ Xatolik yuz berdi.',
+          show_alert: true,
+        });
+        return;
+      }
+
+      // Check if allowed to delete:
+      // 1. Admin was created by current user
+      // 2. OR admin was created after current user
+      const canDelete =
+        adminToDelete.createdBy === ctx.from!.id.toString() ||
+        adminToDelete.createdAt > currentAdmin.createdAt;
+
+      if (!canDelete) {
+        await ctx.answerCallbackQuery({
+          text: "❌ Siz faqat o'zingiz yaratgan yoki o'zingizdan keyin qo'shilgan adminlarni o'chira olasiz!",
           show_alert: true,
         });
         return;
@@ -4313,16 +4391,26 @@ ${existingSerial.description || ''}
       const admin = await this.getAdmin(ctx);
       if (!admin) return;
 
+      // Store context so we know where to go back
+      if (ctx.from) {
+        this.sessionService.updateSessionData(ctx.from.id, {
+          menuContext: 'premium_banned',
+        });
+      }
+
       const keyboard = new Keyboard()
         .text("👥 Hamma userlarni ko'rish")
         .text('🔍 Qidirish')
         .row()
-        .text('🔙 Orqaga');
+        .text("💳 To'lovlar menyusiga qaytish");
 
       await ctx.reply(
         '🚫 **Premium banned users**\n\n' +
           "Yolg'on to'lov ma'lumotlarini ishlatgan va premium'dan bloklangan foydalanuvchilar.",
-        { reply_markup: keyboard.resized() },
+        {
+          parse_mode: 'Markdown',
+          reply_markup: keyboard.resized(),
+        },
       );
     } catch (error) {
       this.logger.error('Error showing premium banned users menu:', error);
