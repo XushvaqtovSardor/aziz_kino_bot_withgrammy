@@ -3703,7 +3703,7 @@ ${existingSerial.description || ''}
       // Check for cancel
       if (text === '❌ Bekor qilish') {
         this.sessionService.clearSession(ctx.from.id);
-        const admin = await this.adminService.getAdminByTelegramId(ctx.from.id);
+        const admin = await this.adminService.getAdminByTelegramId(String(ctx.from.id));
         await ctx.reply(
           '❌ Bekor qilindi',
           AdminKeyboard.getAdminMainMenu(admin?.role || 'ADMIN'),
@@ -3920,7 +3920,7 @@ ${existingSerial.description || ''}
       // Clear session
       this.sessionService.clearSession(ctx.from.id);
 
-      const admin = await this.adminService.getAdminByTelegramId(ctx.from.id);
+      const admin = await this.adminService.getAdminByTelegramId(String(ctx.from.id));
       await ctx.reply(
         "✅ Premyera e'loni yuborildi!",
         AdminKeyboard.getAdminMainMenu(admin?.role || 'ADMIN'),
@@ -4027,7 +4027,7 @@ ${existingSerial.description || ''}
       // Check for cancel
       if (text === '❌ Bekor qilish') {
         this.sessionService.clearSession(ctx.from.id);
-        const admin = await this.adminService.getAdminByTelegramId(ctx.from.id);
+        const admin = await this.adminService.getAdminByTelegramId(String(ctx.from.id));
         await ctx.reply(
           '❌ Bekor qilindi',
           AdminKeyboard.getAdminMainMenu(admin?.role || 'ADMIN'),
@@ -4155,7 +4155,7 @@ ${existingSerial.description || ''}
       // Clear session
       this.sessionService.clearSession(ctx.from.id);
 
-      const admin = await this.adminService.getAdminByTelegramId(ctx.from.id);
+      const admin = await this.adminService.getAdminByTelegramId(String(ctx.from.id));
       await ctx.reply(
         '✅ Xabar Telegram Premium foydalanuvchilarga yuborildi!',
         AdminKeyboard.getAdminMainMenu(admin?.role || 'ADMIN'),
@@ -4253,7 +4253,7 @@ ${existingSerial.description || ''}
       // Check for cancel
       if (text === '❌ Bekor qilish') {
         this.sessionService.clearSession(ctx.from.id);
-        const admin = await this.adminService.getAdminByTelegramId(ctx.from.id);
+        const admin = await this.adminService.getAdminByTelegramId(String(ctx.from.id));
         await ctx.reply(
           '❌ Bekor qilindi',
           AdminKeyboard.getAdminMainMenu(admin?.role || 'ADMIN'),
@@ -4371,7 +4371,7 @@ ${existingSerial.description || ''}
         reply_markup: { inline_keyboard: [] },
       });
 
-      const admin = await this.adminService.getAdminByTelegramId(ctx.from.id);
+      const admin = await this.adminService.getAdminByTelegramId(String(ctx.from.id));
       await ctx.reply(
         `✅ Foydalanuvchi bloklandi!\n\n` +
           `👤 Ism: ${user.firstName || "Noma'lum"}\n` +
@@ -4426,7 +4426,7 @@ ${existingSerial.description || ''}
       // Check for cancel
       if (text === '❌ Bekor qilish') {
         this.sessionService.clearSession(ctx.from.id);
-        const admin = await this.adminService.getAdminByTelegramId(ctx.from.id);
+        const admin = await this.adminService.getAdminByTelegramId(String(ctx.from.id));
         await ctx.reply(
           '❌ Bekor qilindi',
           AdminKeyboard.getAdminMainMenu(admin?.role || 'ADMIN'),
@@ -4545,7 +4545,7 @@ ${existingSerial.description || ''}
         reply_markup: { inline_keyboard: [] },
       });
 
-      const admin = await this.adminService.getAdminByTelegramId(ctx.from.id);
+      const admin = await this.adminService.getAdminByTelegramId(String(ctx.from.id));
       await ctx.reply(
         `✅ Foydalanuvchi blokdan ochildi!\n\n` +
           `👤 Ism: ${user.firstName || "Noma'lum"}\n` +
@@ -4793,7 +4793,7 @@ ${existingSerial.description || ''}
         reply_markup: { inline_keyboard: [] },
       });
 
-      const admin = await this.adminService.getAdminByTelegramId(ctx.from.id);
+      const admin = await this.adminService.getAdminByTelegramId(String(ctx.from.id));
       await ctx.reply(
         `✅ Foydalanuvchi premium ban'dan ochildi!\n\n` +
           `👤 Ism: ${user.firstName || "Noma'lum"}\n` +
@@ -4817,7 +4817,7 @@ ${existingSerial.description || ''}
 
       this.sessionService.clearSession(ctx.from.id);
 
-      const admin = await this.adminService.getAdminByTelegramId(ctx.from.id);
+      const admin = await this.adminService.getAdminByTelegramId(String(ctx.from.id));
       await ctx.reply(
         '❌ Bekor qilindi.',
         AdminKeyboard.getAdminMainMenu(admin?.role || 'ADMIN'),
@@ -4976,7 +4976,7 @@ ${existingSerial.description || ''}
         where: { id: movie.id },
       });
 
-      const admin = await this.adminService.getAdminByTelegramId(ctx.from.id);
+      const admin = await this.adminService.getAdminByTelegramId(String(ctx.from.id));
       await ctx.reply(
         `✅ **Kino muvaffaqiyatli o'chirildi!**\n\n` +
           `🎬 Nomi: ${movie.title}\n` +
@@ -5028,7 +5028,7 @@ ${existingSerial.description || ''}
         where: { id: serial.id },
       });
 
-      const admin = await this.adminService.getAdminByTelegramId(ctx.from.id);
+      const admin = await this.adminService.getAdminByTelegramId(String(ctx.from.id));
       await ctx.reply(
         `✅ **Serial muvaffaqiyatli o'chirildi!**\n\n` +
           `📺 Nomi: ${serial.title}\n` +
@@ -5055,7 +5055,7 @@ ${existingSerial.description || ''}
 
       this.sessionService.clearSession(ctx.from.id);
 
-      const admin = await this.adminService.getAdminByTelegramId(ctx.from.id);
+      const admin = await this.adminService.getAdminByTelegramId(String(ctx.from.id));
       await ctx.reply(
         "❌ O'chirish bekor qilindi.",
         AdminKeyboard.getAdminMainMenu(admin?.role || 'ADMIN'),
@@ -5112,7 +5112,7 @@ ${existingSerial.description || ''}
         },
       });
 
-      const admin = await this.adminService.getAdminByTelegramId(ctx.from.id);
+      const admin = await this.adminService.getAdminByTelegramId(String(ctx.from.id));
       await ctx.reply(
         '✅ **Tarix muvaffaqiyatli tozalandi!**\n\n' +
           `🗑️ O'chirilgan nofaol kanallar: ${result.count}\n` +
@@ -5189,7 +5189,9 @@ ${existingSerial.description || ''}
           reply_markup: { inline_keyboard: [] },
         });
 
-        const admin = await this.adminService.getAdminByTelegramId(ctx.from.id);
+        const admin = await this.adminService.getAdminByTelegramId(
+          String(ctx.from.id),
+        );
         await ctx.reply(
           '✅ Field kanalga yuborildi!\n\n' +
             `📢 Kanal: ${targetChannelName}\n` +
@@ -5302,7 +5304,7 @@ ${existingSerial.description || ''}
         { parse_mode: 'Markdown' },
       );
 
-      const admin = await this.adminService.getAdminByTelegramId(ctx.from.id);
+      const admin = await this.adminService.getAdminByTelegramId(String(ctx.from.id));
       await ctx.reply(
         "🎉 Premyera e'loni muvaffaqiyatli yuborildi!",
         AdminKeyboard.getAdminMainMenu(admin?.role || 'ADMIN'),
