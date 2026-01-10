@@ -1073,9 +1073,10 @@ Savollaringiz bo'lsa murojaat qiling:
         //     : channel.type === 'PRIVATE'
         //       ? '🔐'
         //       : '🔒';
-        message += `${index + 1}.  ${channel.channelName}\n`;
+        // message += `${index + 1}.  ${channel.channelName}\n`;
+        message += '';
       });
-      message += '\n';
+      message += '';
     }
 
     if (externalChannels.length > 0) {
@@ -1083,7 +1084,7 @@ Savollaringiz bo'lsa murojaat qiling:
       // externalChannels.forEach((channel, index) => {
       //   message += `${index + 1}. 🔗 ${channel.channelName}\n`;
       // });
-      message += '\n';
+      message += '';
     }
     message += `<blockquote>💎 Premium obuna sotib olib, kanallarga obuna bo'lmasdan foydalanishingiz mumkin.</blockquote>`;
 
