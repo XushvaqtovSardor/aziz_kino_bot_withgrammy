@@ -31,6 +31,7 @@ export enum AdminState {
   UNBLOCK_USER = 'UNBLOCK_USER',
   PREMIUM_BANNED_USERS = 'PREMIUM_BANNED_USERS',
   UNBAN_PREMIUM_USER = 'UNBAN_PREMIUM_USER',
+  DELETE_CONTENT = 'DELETE_CONTENT',
 }
 
 export interface FieldCreationData {

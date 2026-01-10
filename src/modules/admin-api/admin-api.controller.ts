@@ -12,6 +12,7 @@ import {
   BadRequestException,
   HttpException,
   HttpStatus,
+  NotFoundException,
 } from '@nestjs/common';
 import { AdminApiGuard } from './admin-api.guard';
 import { AdminService } from '../admin/services/admin.service';
@@ -21,6 +22,7 @@ import { ChannelService } from '../channel/services/channel.service';
 import { MovieService } from '../content/services/movie.service';
 import { SerialService } from '../content/services/serial.service';
 import { PaymentService } from '../payment/services/payment.service';
+import { PrismaService } from '../../prisma/prisma.service';
 import { AdminRole } from '@prisma/client';
 
 @Controller('api/admin')
@@ -34,6 +36,7 @@ export class AdminApiController {
     private movieService: MovieService,
     private serialService: SerialService,
     private paymentService: PaymentService,
+    private prisma: PrismaService,
   ) {}
 
   // ==================== AUTH ====================
@@ -309,6 +312,92 @@ export class AdminApiController {
       );
     }
     return this.serialService.delete(+id);
+  }
+
+  // Delete movie by code
+  @Delete('movies/code/:code')
+  async deleteMovieByCode(@Request() req, @Param('code') code: string) {
+    const canDelete =
+      req.admin.role === AdminRole.SUPERADMIN || req.admin.canDeleteContent;
+    if (!canDelete) {
+      throw new HttpException(
+        'No permission to delete content',
+        HttpStatus.FORBIDDEN,
+      );
+    }
+
+    const movie = await this.prisma.movie.findUnique({
+      where: { code: parseInt(code) },
+      include: { episodes: true },
+    });
+
+    if (!movie) {
+      throw new NotFoundException(`Movie with code ${code} not found`);
+    }
+
+    // Delete all episodes first (cascade should handle this, but being explicit)
+    await this.prisma.movieEpisode.deleteMany({
+      where: { movieId: movie.id },
+    });
+
+    // Delete watch history
+    await this.prisma.watchHistory.deleteMany({
+      where: { movieId: movie.id },
+    });
+
+    // Delete the movie
+    await this.prisma.movie.delete({
+      where: { id: movie.id },
+    });
+
+    return {
+      success: true,
+      message: `Movie "${movie.title}" (code: ${code}) deleted successfully`,
+      deletedEpisodes: movie.episodes.length,
+    };
+  }
+
+  // Delete serial by code
+  @Delete('serials/code/:code')
+  async deleteSerialByCode(@Request() req, @Param('code') code: string) {
+    const canDelete =
+      req.admin.role === AdminRole.SUPERADMIN || req.admin.canDeleteContent;
+    if (!canDelete) {
+      throw new HttpException(
+        'No permission to delete content',
+        HttpStatus.FORBIDDEN,
+      );
+    }
+
+    const serial = await this.prisma.serial.findUnique({
+      where: { code: parseInt(code) },
+      include: { episodes: true },
+    });
+
+    if (!serial) {
+      throw new NotFoundException(`Serial with code ${code} not found`);
+    }
+
+    // Delete all episodes first
+    await this.prisma.episode.deleteMany({
+      where: { serialId: serial.id },
+    });
+
+    // Delete watch history
+    await this.prisma.watchHistory.deleteMany({
+      where: { serialId: serial.id },
+    });
+
+    // Delete the serial
+    await this.prisma.serial.delete({
+      where: { id: serial.id },
+    });
+
+    return {
+      success: true,
+      message: `Serial "${serial.title}" (code: ${code}) deleted successfully`,
+      deletedEpisodes: serial.episodes.length,
+    };
   }
 
   // ==================== PAYMENTS ====================

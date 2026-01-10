@@ -135,6 +135,7 @@ function switchSection(section) {
     movies: 'Kinolar',
     serials: 'Seriallar',
     payments: "To'lovlar",
+    'delete-content': "Kontent o'chirish",
   };
   document.getElementById('sectionTitle').textContent = titles[section];
 
@@ -152,6 +153,7 @@ async function loadSectionData(section) {
     movies: loadMovies,
     serials: loadSerials,
     payments: loadPayments,
+    'delete-content': loadDeleteContent,
   };
 
   const loader = loaders[section];
@@ -1222,6 +1224,113 @@ async function unbanPremiumUser(telegramId) {
     alert('Foydalanuvchi premium blokdan chiqarildi!');
   } catch (error) {
     alert('Xatolik: ' + error.message);
+  }
+}
+
+// Delete Content by Code
+async function loadDeleteContent() {
+  const section = document.getElementById('delete-content-section');
+
+  section.innerHTML = `
+    <div class="delete-content-container">
+      <div class="delete-card">
+        <h3>🎬 Kinoni kod bo'yicha o'chirish</h3>
+        <p>Kino kodini kiriting. Kod bo'yicha topilgan kino va unga bog'langan barcha qismlar hamda tarix o'chiriladi.</p>
+        <div class="input-group">
+          <input type="number" id="movieCodeInput" placeholder="Kino kodi (masalan: 100)" />
+          <button class="btn-delete" onclick="deleteMovieByCode()">🗑️ O'chirish</button>
+        </div>
+        <div id="movieDeleteResult" class="result-message"></div>
+      </div>
+
+      <div class="delete-card">
+        <h3>📺 Serialni kod bo'yicha o'chirish</h3>
+        <p>Serial kodini kiriting. Kod bo'yicha topilgan serial va unga bog'langan barcha qismlar hamda tarix o'chiriladi.</p>
+        <div class="input-group">
+          <input type="number" id="serialCodeInput" placeholder="Serial kodi (masalan: 200)" />
+          <button class="btn-delete" onclick="deleteSerialByCode()">🗑️ O'chirish</button>
+        </div>
+        <div id="serialDeleteResult" class="result-message"></div>
+      </div>
+
+      <div class="warning-card">
+        <h4>⚠️ Ogohlantirish</h4>
+        <ul>
+          <li>Bu amal qaytarilmaydi!</li>
+          <li>Barcha qismlar va tarix o'chiriladi</li>
+          <li>Kod bo'sh holatga qaytadi</li>
+          <li>Foydalanuvchilar o'sha kodni kiritsa "Kino/Serial topilmadi" xabari chiqadi</li>
+        </ul>
+      </div>
+    </div>
+  `;
+}
+
+async function deleteMovieByCode() {
+  const code = document.getElementById('movieCodeInput').value.trim();
+  const resultDiv = document.getElementById('movieDeleteResult');
+
+  if (!code) {
+    resultDiv.innerHTML = '<p class="error">❌ Kino kodini kiriting!</p>';
+    return;
+  }
+
+  if (
+    !confirm(
+      `${code} kodli kinoni o'chirishga ishonchingiz komilmi? Bu amal qaytarilmaydi!`,
+    )
+  ) {
+    return;
+  }
+
+  resultDiv.innerHTML = '<p class="loading">⏳ O\'chirilmoqda...</p>';
+
+  try {
+    const result = await apiRequest(`/movies/code/${code}`, {
+      method: 'DELETE',
+    });
+
+    resultDiv.innerHTML = `
+      <p class="success">✅ ${result.message}</p>
+      <p class="info">O'chirilgan qismlar: ${result.deletedEpisodes}</p>
+    `;
+    document.getElementById('movieCodeInput').value = '';
+  } catch (error) {
+    resultDiv.innerHTML = `<p class="error">❌ Xatolik: ${error.message}</p>`;
+  }
+}
+
+async function deleteSerialByCode() {
+  const code = document.getElementById('serialCodeInput').value.trim();
+  const resultDiv = document.getElementById('serialDeleteResult');
+
+  if (!code) {
+    resultDiv.innerHTML = '<p class="error">❌ Serial kodini kiriting!</p>';
+    return;
+  }
+
+  if (
+    !confirm(
+      `${code} kodli serialni o'chirishga ishonchingiz komilmi? Bu amal qaytarilmaydi!`,
+    )
+  ) {
+    return;
+  }
+
+  resultDiv.innerHTML = '<p class="loading">⏳ O\'chirilmoqda...</p>';
+
+  try {
+    const result = await apiRequest(`/serials/code/${code}`, {
+      method: 'DELETE',
+    });
+
+    resultDiv.innerHTML = `
+      <p class="success">✅ ${result.message}</p>
+      <p class="info">O'chirilgan qismlar: ${result.deletedEpisodes}</p>
+    `;
+    document.getElementById('serialCodeInput').value = '';
+  } catch (error) {
+    resultDiv.innerHTML = `<p class="error">❌ Xatolik: ${error.message}</p>`;
   }
 }
 

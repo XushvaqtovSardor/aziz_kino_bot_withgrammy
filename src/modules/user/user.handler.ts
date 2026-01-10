@@ -1256,14 +1256,14 @@ Savollaringiz bo'lsa murojaat qiling:
     const chatId = String(ctx.chatJoinRequest.chat.id);
     const cacheKey = `${userId}_${chatId}`;
 
-    this.logger.log(`Join request from user ${userId} to channel ${chatId}`);
+    this.logger.debug(`Join request from user ${userId} to channel ${chatId}`);
 
     // Check if this user already sent a request to this channel recently (within 5 minutes)
     const lastRequestTime = this.joinRequestCache.get(cacheKey);
     const now = Date.now();
 
     if (lastRequestTime && now - lastRequestTime < 5 * 60 * 1000) {
-      this.logger.log(
+      this.logger.debug(
         `Duplicate join request from user ${userId} to channel ${chatId}, ignoring`,
       );
       return;
@@ -1285,7 +1285,7 @@ Savollaringiz bo'lsa murojaat qiling:
 
     if (matchedChannel) {
       await this.channelService.incrementPendingRequests(matchedChannel.id);
-      this.logger.log(
+      this.logger.debug(
         `Incremented pending requests for channel ${matchedChannel.channelName}`,
       );
     }

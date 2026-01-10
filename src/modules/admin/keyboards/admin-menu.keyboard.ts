@@ -24,7 +24,12 @@ export class AdminKeyboard {
         .row()
         .text("💳 To'lovlar")
         .text('⚙️ Sozlamalar')
+        .row()
+        .text("🗑️ Kontent o'chirish")
         .row();
+    } else if (role === AdminRole.MANAGER) {
+      // Managers can also delete content if they have permission
+      keyboard.text("🗑️ Kontent o'chirish").row();
     }
 
     keyboard.text('🌐 Web Panel').row().text('🔙 Orqaga');

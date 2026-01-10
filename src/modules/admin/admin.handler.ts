@@ -208,6 +208,14 @@ export class AdminHandler implements OnModuleInit {
       "💳 To'lovlar menyusiga qaytish",
       this.withAdminCheck(this.showPaymentsMenu.bind(this)),
     );
+    bot.hears(
+      "🗑️ Kontent o'chirish",
+      this.withAdminCheck(this.startDeleteContent.bind(this)),
+    );
+    bot.hears(
+      '🗑️ Tarixni tozalash',
+      this.withAdminCheck(this.clearChannelHistory.bind(this)),
+    );
 
     // Callback query handlers - all with admin check
     bot.callbackQuery(/^field_detail_(\d+)$/, async (ctx) => {
@@ -351,6 +359,21 @@ export class AdminHandler implements OnModuleInit {
     bot.callbackQuery('cancel_unban_premium', async (ctx) => {
       const admin = await this.getAdmin(ctx);
       if (admin) await this.cancelUnbanPremium(ctx);
+    });
+
+    bot.callbackQuery(/^confirm_delete_movie_(\d+)$/, async (ctx) => {
+      const admin = await this.getAdmin(ctx);
+      if (admin) await this.confirmDeleteMovie(ctx);
+    });
+
+    bot.callbackQuery(/^confirm_delete_serial_(\d+)$/, async (ctx) => {
+      const admin = await this.getAdmin(ctx);
+      if (admin) await this.confirmDeleteSerial(ctx);
+    });
+
+    bot.callbackQuery('cancel_delete_content', async (ctx) => {
+      const admin = await this.getAdmin(ctx);
+      if (admin) await this.cancelDeleteContent(ctx);
     });
 
     bot.callbackQuery('add_new_admin', async (ctx) => {
@@ -885,6 +908,9 @@ export class AdminHandler implements OnModuleInit {
       case AdminState.UNBAN_PREMIUM_USER:
         await this.handleUnbanPremiumUserSteps(ctx, text, session);
         break;
+      case AdminState.DELETE_CONTENT:
+        await this.handleDeleteContentSteps(ctx);
+        break;
       default:
         this.logger.warn(`Unhandled session state: ${session.state}`);
         break;
@@ -1372,7 +1398,9 @@ export class AdminHandler implements OnModuleInit {
     const keyboard = new Keyboard()
       .text("🔍 Link bo'yicha qidirish")
       .row()
-      .text('🔙 Orqaga')
+      .text('�️ Tarixni tozalash')
+      .row()
+      .text('�🔙 Orqaga')
       .resized();
 
     await ctx.reply(message, {
@@ -3639,6 +3667,7 @@ ${existingSerial.description || ''}
           where: { code: codeNumber },
           include: {
             episodes: true,
+            field: true,
           },
         });
         contentType = 'serial';
@@ -3647,6 +3676,7 @@ ${existingSerial.description || ''}
           where: { code: codeNumber },
           include: {
             episodes: true,
+            field: true,
           },
         });
         contentType = 'movie';
@@ -3660,9 +3690,17 @@ ${existingSerial.description || ''}
       }
 
       // Get field info for channel link
-      const field = await this.prisma.field.findUnique({
+      const field = content.field || await this.prisma.field.findUnique({
         where: { id: content.fieldId },
       });
+
+      // Ask if admin wants to send to field channel
+      const keyboard = new InlineKeyboard()
+        .text('📢 Ha, field kanalga yuborish', `send_to_field_${contentType}_${codeNumber}`)
+        .row()
+        .text('👥 Faqat foydalanuvchilarga', `broadcast_premiere_${contentType}_${codeNumber}`)
+        .row()
+        .text('❌ Bekor qilish', 'cancel_premiere');
 
       // Format message
       const caption =
@@ -3670,6 +3708,52 @@ ${existingSerial.description || ''}
         `├‣ ${isSerial ? 'Serial' : 'Kino'} nomi : ${content.title}\n` +
         `├‣ ${isSerial ? 'Serial' : 'Kino'} kodi: ${isSerial ? 's' : ''}${content.code}\n` +
         `├‣ Qism: ${content.episodes?.length || 0}\n` +
+        `├‣ Janrlari: ${content.genre || "Noma'lum"}\n` +
+        `├‣ Kanal: @${field?.name || 'Kanal'}\n` +
+        '╰────────────────────\n' +
+        `▶️ ${isSerial ? 'Serialning' : 'Kinoning'} to'liq qismini @${ctx.me.username} dan tomosha qilishingiz mumkin!`;
+
+      // Send preview to admin
+      if (content.posterFileId) {
+        await ctx.replyWithPhoto(content.posterFileId, {
+          caption:
+            '🎬 **Premyera e\'loni**\n\n' +
+            caption +
+            '\n\n📢 Bu kontentni qayerga yubormoqchisiz?',
+          parse_mode: 'Markdown',
+          reply_markup: keyboard,
+        });
+      } else {
+        await ctx.reply(
+          '🎬 **Premyera e\'loni**\n\n' +
+            caption +
+            '\n\n📢 Bu kontentni qayerga yubormoqchisiz?',
+          {
+            parse_mode: 'Markdown',
+            reply_markup: keyboard,
+          },
+        );
+      }
+
+      // Save data to session
+      this.sessionService.updateSession(ctx.from.id, {
+        state: AdminState.BROADCAST_PREMIERE,
+        data: {
+          contentType,
+          code: codeNumber,
+          caption,
+          poster: content.posterFileId,
+          fieldId: content.fieldId,
+          fieldChannelId: field?.channelId,
+          databaseChannelId: field?.databaseChannelId,
+        },
+      });
+    } catch (error) {
+      this.logger.error('Error handling premiere broadcast steps:', error);
+      await ctx.reply("❌ Xatolik yuz berdi. Qaytadan urinib ko'ring.");
+      this.sessionService.clearSession(ctx.from.id);
+    }
+  }
         `├‣ Janrlari: ${content.genre || "Noma'lum"}\n` +
         `├‣ Kanal: @${field?.name || 'Kanal'}\n` +
         '╰────────────────────\n' +
@@ -4639,6 +4723,238 @@ ${existingSerial.description || ''}
       );
     } catch (error) {
       this.logger.error('Error canceling unban premium:', error);
+    }
+  }
+
+  // ==================== DELETE CONTENT BY CODE ====================
+  private async startDeleteContent(ctx: BotContext) {
+    const admin = await this.getAdmin(ctx);
+    if (!admin) return;
+
+    // Check permission
+    if (admin.role !== 'SUPERADMIN' && !admin.canDeleteContent) {
+      await ctx.reply("❌ Sizda kontent o'chirish huquqi yo'q!");
+      return;
+    }
+
+    this.sessionService.createSession(ctx.from.id, AdminState.DELETE_CONTENT);
+
+    await ctx.reply(
+      "🗑️ **Kontent o'chirish**\n\n" +
+        'Quyidagi formatda kino yoki serial kodini yuboring:\n\n' +
+        '🎬 Kino: `m100` yoki `M100`\n' +
+        '📺 Serial: `s200` yoki `S200`\n\n' +
+        '⚠️ **Ogohlantirish:**\n' +
+        '• Bu amal qaytarilmaydi!\n' +
+        "• Barcha qismlar va tarix o'chiriladi\n" +
+        "• Kod bo'sh holatga qaytadi",
+      { parse_mode: 'Markdown', reply_markup: { remove_keyboard: true } },
+    );
+  }
+
+  private async handleDeleteContentSteps(ctx: BotContext) {
+    const session = this.sessionService.getSession(ctx.from.id);
+    if (!session || session.state !== AdminState.DELETE_CONTENT) return;
+
+    const text = ctx.message?.text?.trim();
+    if (!text) return;
+
+    // Parse code: m100 or s200
+    const movieMatch = text.match(/^m(\d+)$/i);
+    const serialMatch = text.match(/^s(\d+)$/i);
+
+    if (!movieMatch && !serialMatch) {
+      await ctx.reply(
+        "❌ Noto'g'ri format!\n\n" +
+          "To'g'ri format:\n" +
+          '🎬 Kino: m100\n' +
+          '📺 Serial: s200',
+      );
+      return;
+    }
+
+    try {
+      if (movieMatch) {
+        const code = movieMatch[1];
+        await this.deleteMovieByCode(ctx, code);
+      } else if (serialMatch) {
+        const code = serialMatch[1];
+        await this.deleteSerialByCode(ctx, code);
+      }
+    } catch (error) {
+      this.logger.error('Error deleting content:', error);
+      await ctx.reply('❌ Xatolik yuz berdi: ' + error.message);
+    }
+
+    this.sessionService.clearSession(ctx.from.id);
+  }
+
+  private async deleteMovieByCode(ctx: BotContext, code: string) {
+    const movie = await this.prisma.movie.findUnique({
+      where: { code: parseInt(code) },
+      include: { episodes: true },
+    });
+
+    if (!movie) {
+      await ctx.reply(`❌ ${code} kodli kino topilmadi!`);
+      return;
+    }
+
+    // Confirmation
+    const keyboard = new InlineKeyboard()
+      .text(`✅ Ha, o'chirish`, `confirm_delete_movie_${code}`)
+      .text('❌ Bekor qilish', 'cancel_delete_content');
+
+    await ctx.reply(
+      `⚠️ **Tasdiqlash kerak!**\n\n` +
+        `🎬 Kino: ${movie.title}\n` +
+        `🆔 Kod: ${code}\n` +
+        `📹 Qismlar: ${movie.episodes.length}\n\n` +
+        `Bu kinoni va unga bog'langan barcha ma'lumotlarni o'chirmoqchimisiz?`,
+      { parse_mode: 'Markdown', reply_markup: keyboard },
+    );
+  }
+
+  private async deleteSerialByCode(ctx: BotContext, code: string) {
+    const serial = await this.prisma.serial.findUnique({
+      where: { code: parseInt(code) },
+      include: { episodes: true },
+    });
+
+    if (!serial) {
+      await ctx.reply(`❌ ${code} kodli serial topilmadi!`);
+      return;
+    }
+
+    // Confirmation
+    const keyboard = new InlineKeyboard()
+      .text(`✅ Ha, o'chirish`, `confirm_delete_serial_${code}`)
+      .text('❌ Bekor qilish', 'cancel_delete_content');
+
+    await ctx.reply(
+      `⚠️ **Tasdiqlash kerak!**\n\n` +
+        `📺 Serial: ${serial.title}\n` +
+        `🆔 Kod: ${code}\n` +
+        `📹 Qismlar: ${serial.episodes.length}\n\n` +
+        `Bu serialni va unga bog'langan barcha ma'lumotlarni o'chirmoqchimisiz?`,
+      { parse_mode: 'Markdown', reply_markup: keyboard },
+    );
+  }
+
+  private async confirmDeleteMovie(ctx: any) {
+    const code = ctx.match[1];
+
+    try {
+      await ctx.answerCallbackQuery();
+      await ctx.editMessageReplyMarkup({ inline_keyboard: [] });
+
+      const movie = await this.prisma.movie.findUnique({
+        where: { code: parseInt(code) },
+        include: { episodes: true },
+      });
+
+      if (!movie) {
+        await ctx.reply(`❌ ${code} kodli kino topilmadi!`);
+        return;
+      }
+
+      // Delete all episodes
+      await this.prisma.movieEpisode.deleteMany({
+        where: { movieId: movie.id },
+      });
+
+      // Delete watch history
+      await this.prisma.watchHistory.deleteMany({
+        where: { movieId: movie.id },
+      });
+
+      // Delete the movie
+      await this.prisma.movie.delete({
+        where: { id: movie.id },
+      });
+
+      const admin = await this.adminService.getAdminByTelegramId(ctx.from.id);
+      await ctx.reply(
+        `✅ **Kino muvaffaqiyatli o'chirildi!**\n\n` +
+          `🎬 Nomi: ${movie.title}\n` +
+          `🆔 Kod: ${code}\n` +
+          `📹 O'chirilgan qismlar: ${movie.episodes.length}\n\n` +
+          `Kod endi bo'sh va qayta ishlatilishi mumkin.`,
+        {
+          parse_mode: 'Markdown',
+          reply_markup: AdminKeyboard.getAdminMainMenu(admin?.role || 'ADMIN'),
+        },
+      );
+    } catch (error) {
+      this.logger.error('Error confirming delete movie:', error);
+      await ctx.reply('❌ Xatolik yuz berdi: ' + error.message);
+    }
+  }
+
+  private async confirmDeleteSerial(ctx: any) {
+    const code = ctx.match[1];
+
+    try {
+      await ctx.answerCallbackQuery();
+      await ctx.editMessageReplyMarkup({ inline_keyboard: [] });
+
+      const serial = await this.prisma.serial.findUnique({
+        where: { code: parseInt(code) },
+        include: { episodes: true },
+      });
+
+      if (!serial) {
+        await ctx.reply(`❌ ${code} kodli serial topilmadi!`);
+        return;
+      }
+
+      // Delete all episodes
+      await this.prisma.episode.deleteMany({
+        where: { serialId: serial.id },
+      });
+
+      // Delete watch history
+      await this.prisma.watchHistory.deleteMany({
+        where: { serialId: serial.id },
+      });
+
+      // Delete the serial
+      await this.prisma.serial.delete({
+        where: { id: serial.id },
+      });
+
+      const admin = await this.adminService.getAdminByTelegramId(ctx.from.id);
+      await ctx.reply(
+        `✅ **Serial muvaffaqiyatli o'chirildi!**\n\n` +
+          `📺 Nomi: ${serial.title}\n` +
+          `🆔 Kod: ${code}\n` +
+          `📹 O'chirilgan qismlar: ${serial.episodes.length}\n\n` +
+          `Kod endi bo'sh va qayta ishlatilishi mumkin.`,
+        {
+          parse_mode: 'Markdown',
+          reply_markup: AdminKeyboard.getAdminMainMenu(admin?.role || 'ADMIN'),
+        },
+      );
+    } catch (error) {
+      this.logger.error('Error confirming delete serial:', error);
+      await ctx.reply('❌ Xatolik yuz berdi: ' + error.message);
+    }
+  }
+
+  private async cancelDeleteContent(ctx: any) {
+    try {
+      await ctx.answerCallbackQuery();
+      await ctx.editMessageReplyMarkup({ inline_keyboard: [] });
+
+      this.sessionService.clearSession(ctx.from.id);
+
+      const admin = await this.adminService.getAdminByTelegramId(ctx.from.id);
+      await ctx.reply(
+        "❌ O'chirish bekor qilindi.",
+        AdminKeyboard.getAdminMainMenu(admin?.role || 'ADMIN'),
+      );
+    } catch (error) {
+      this.logger.error('Error canceling delete:', error);
     }
   }
 }
