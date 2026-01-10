@@ -438,6 +438,23 @@ export class AdminHandler implements OnModuleInit {
       if (admin) await this.backToAdminMenu(ctx);
     });
 
+    // Broadcast handlers - MUST be before the general pattern
+    bot.callbackQuery('broadcast_premiere', async (ctx) => {
+      const admin = await this.getAdmin(ctx);
+      if (admin) {
+        this.logger.log('🎬 Premiere broadcast button clicked');
+        await this.startPremiereBroadcast(ctx);
+      }
+    });
+
+    bot.callbackQuery('broadcast_telegram_premium', async (ctx) => {
+      const admin = await this.getAdmin(ctx);
+      if (admin) {
+        this.logger.log('⭐️ Telegram Premium broadcast button clicked');
+        await this.startTelegramPremiumBroadcast(ctx);
+      }
+    });
+
     bot.callbackQuery(/^broadcast_(all|premium|free)$/, async (ctx) => {
       const admin = await this.getAdmin(ctx);
       if (admin) await this.handleBroadcastType(ctx);
@@ -2340,18 +2357,6 @@ Qaysi guruhga xabar yubormoqchisiz?
     const callbackData = ctx.callbackQuery.data;
     await ctx.answerCallbackQuery();
 
-    // Handle premiere broadcast separately
-    if (callbackData === 'broadcast_premiere') {
-      await this.startPremiereBroadcast(ctx);
-      return;
-    }
-
-    // Handle Telegram Premium broadcast separately
-    if (callbackData === 'broadcast_telegram_premium') {
-      await this.startTelegramPremiumBroadcast(ctx);
-      return;
-    }
-
     const broadcastType = callbackData.replace('broadcast_', '').toUpperCase();
 
     // Start broadcast session
@@ -3622,12 +3627,14 @@ ${existingSerial.description || ''}
 
   private async startPremiereBroadcast(ctx: any) {
     try {
+      this.logger.log('🎬 Starting premiere broadcast...');
       // Get admin info
       const admin = await this.adminService.getAdminByTelegramId(ctx.from.id);
       if (!admin) {
         await ctx.reply('⛔️ Admin topilmadi.');
         return;
       }
+      this.logger.log(`Admin found: ${admin.username || admin.telegramId}`);
 
       // Start session
       this.sessionService.startSession(
@@ -3658,6 +3665,7 @@ ${existingSerial.description || ''}
     session: any,
   ) {
     try {
+      this.logger.log(`📝 Premiere broadcast step - received text: ${text}`);
       // Check for cancel
       if (text === '❌ Bekor qilish') {
         this.sessionService.clearSession(ctx.from.id);
@@ -3936,6 +3944,9 @@ ${existingSerial.description || ''}
     session: any,
   ) {
     try {
+      this.logger.log(
+        `📝 Telegram Premium broadcast step - received text: ${text}`,
+      );
       // Check for cancel
       if (text === '❌ Bekor qilish') {
         this.sessionService.clearSession(ctx.from.id);
