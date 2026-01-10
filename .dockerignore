@@ -26,10 +26,13 @@ build
 .DS_Store
 Thumbs.db
 
-# Logs
-logs
+# Logs (keep directory structure but not log files)
+logs/*.log
+logs/*-audit.json
+!logs/.gitkeep
 *.log
 npm-debug.log*
+pnpm-debug.log*
 
 # Testing
 coverage

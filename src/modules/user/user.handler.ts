@@ -1,6 +1,6 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { BotContext } from '../../bot/bot.context';
-import { InlineKeyboard, Keyboard } from 'grammy';
+import { InlineKeyboard } from 'grammy';
 import { UserService } from './services/user.service';
 import { MovieService } from '../content/services/movie.service';
 import { SerialService } from '../content/services/serial.service';
@@ -47,6 +47,24 @@ export class UserHandler implements OnModuleInit {
 
   private registerHandlers() {
     const bot = this.grammyBot.bot;
+
+    // Middleware to update Telegram Premium status
+    bot.use(async (ctx, next) => {
+      if (ctx.from && ctx.from.id) {
+        try {
+          const hasTelegramPremium = ctx.from.is_premium || false;
+
+          // Update user's Telegram Premium status in database
+          await this.prisma.user.updateMany({
+            where: { telegramId: String(ctx.from.id) },
+            data: { hasTelegramPremium },
+          });
+        } catch (error) {
+          this.logger.debug('Error updating Telegram Premium status:', error);
+        }
+      }
+      await next();
+    });
 
     // Start command
     bot.command('start', this.handleStart.bind(this));
@@ -117,7 +135,9 @@ export class UserHandler implements OnModuleInit {
     if (!ctx.from) return;
 
     const payload = ctx.match;
-    this.logger.log(`User ${ctx.from.id} started bot with payload: ${payload}`);
+    this.logger.log(
+      `User ${ctx.from.id} started bot with payload: ${payload || 'none'}`,
+    );
 
     // Check Telegram Premium status
     const hasTelegramPremium = ctx.from.is_premium || false;
@@ -240,8 +260,6 @@ export class UserHandler implements OnModuleInit {
     if (!ctx.from) return;
 
     const user = await this.userService.findByTelegramId(String(ctx.from.id));
-    const isPremium = user?.isPremium || false;
-    const isPremiumBanned = user?.isPremiumBanned || false;
 
     const fields = await this.fieldService.findAll();
 
@@ -1066,7 +1084,7 @@ Savollaringiz bo'lsa murojaat qiling:
     //📱 <b>Telegram kanallar</b>
     if (telegramChannels.length > 0) {
       message += `(${telegramChannels.length}):\n`;
-      telegramChannels.forEach((channel, index) => {
+      telegramChannels.forEach(() => {
         // const channelTypeEmoji =
         //   channel.type === 'PUBLIC'
         //     ? '🔓'

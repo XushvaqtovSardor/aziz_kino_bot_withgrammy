@@ -3738,14 +3738,22 @@ ${existingSerial.description || ''}
         .row()
         .text('❌ Bekor qilish', 'cancel_premiere');
 
+      // Get channel link - use channelLink field if available
+      let channelLink = field?.channelLink || '';
+      if (!channelLink && field?.name) {
+        channelLink = `@${field.name}`;
+      } else if (!channelLink) {
+        channelLink = '@Kanal';
+      }
+
       // Format message
       const caption =
         '╭────────────────────\n' +
-        `├‣ ${isSerial ? 'Serial' : 'Kino'} nomi : ${content.title}\n` +
-        `├‣ ${isSerial ? 'Serial' : 'Kino'} kodi: ${isSerial ? 's' : ''}${content.code}\n` +
-        `├‣ Qism: ${content.episodes?.length || 0}\n` +
-        `├‣ Janrlari: ${content.genre || "Noma'lum"}\n` +
-        `├‣ Kanal: @${field?.name || 'Kanal'}\n` +
+        `├‣  ${isSerial ? 'Serial' : 'Kino'} nomi : ${content.title}\n` +
+        `├‣  ${isSerial ? 'Serial' : 'Kino'} kodi: ${isSerial ? 's' : ''}${content.code}\n` +
+        `├‣  Qism: ${content.episodes?.length || 0}\n` +
+        `├‣  Janrlari: ${content.genre || "Noma'lum"}\n` +
+        `├‣  Kanal: ${channelLink}\n` +
         '╰────────────────────\n' +
         `▶️ ${isSerial ? 'Serialning' : 'Kinoning'} to'liq qismini @${botUsername} dan tomosha qilishingiz mumkin!`;
 
@@ -3753,19 +3761,17 @@ ${existingSerial.description || ''}
       if (content.posterFileId) {
         await ctx.replyWithPhoto(content.posterFileId, {
           caption:
-            "🎬 **Premyera e'loni**\n\n" +
+            "🎬 Premyera e'loni\n\n" +
             caption +
             '\n\n📢 Bu kontentni qayerga yubormoqchisiz?',
-          parse_mode: 'Markdown',
           reply_markup: keyboard,
         });
       } else {
         await ctx.reply(
-          "🎬 **Premyera e'loni**\n\n" +
+          "🎬 Premyera e'loni\n\n" +
             caption +
             '\n\n📢 Bu kontentni qayerga yubormoqchisiz?',
           {
-            parse_mode: 'Markdown',
             reply_markup: keyboard,
           },
         );
@@ -5046,34 +5052,49 @@ ${existingSerial.description || ''}
         return;
       }
 
-      const { contentType, code, caption, poster, databaseChannelId } =
+      const { contentType, code, caption, poster, fieldId, databaseChannelId } =
         session.data;
 
-      if (!databaseChannelId) {
+      // First, try to get field channel
+      let targetChannelId: string | null = null;
+      let targetChannelName: string | null = null;
+
+      // Option 1: Use field's direct channelId
+      if (fieldId) {
+        const field = await this.prisma.field.findUnique({
+          where: { id: fieldId },
+          include: { databaseChannel: true },
+        });
+
+        if (field) {
+          // Use database channel if exists
+          if (field.databaseChannel) {
+            targetChannelId = field.databaseChannel.channelId;
+            targetChannelName = field.databaseChannel.channelName;
+          }
+          // Otherwise use field's own channelId (this is for posting to field channel directly)
+          else if (field.channelId) {
+            targetChannelId = field.channelId;
+            targetChannelName = field.name;
+          }
+        }
+      }
+
+      if (!targetChannelId) {
         await ctx.reply(
           "❌ Field kanal topilmadi! Bu kontent field kanalga bog'lanmagan.",
         );
         return;
       }
 
-      // Get database channel info
-      const dbChannel = await this.prisma.databaseChannel.findUnique({
-        where: { id: databaseChannelId },
-      });
-
-      if (!dbChannel) {
-        await ctx.reply('❌ Database kanal topilmadi!');
-        return;
-      }
-
       // Send to field channel
       try {
         if (poster) {
-          await ctx.api.sendPhoto(dbChannel.channelId, poster, {
+          await ctx.api.sendPhoto(targetChannelId, poster, {
             caption: caption,
           });
         } else {
-          await ctx.api.sendMessage(dbChannel.channelId, caption);
+          await ctx.api.sendMessage(targetChannelId, caption);
         }
 
         await ctx.editMessageReplyMarkup({
@@ -5082,13 +5103,12 @@ ${existingSerial.description || ''}
 
         const admin = await this.adminService.getAdminByTelegramId(ctx.from.id);
         await ctx.reply(
-          '✅ **Field kanalga yuborildi!**\n\n' +
-            `📢 Kanal: ${dbChannel.channelName}\n` +
+          '✅ Field kanalga yuborildi!\n\n' +
+            `📢 Kanal: ${targetChannelName}\n` +
             `🎬 Kontent: ${contentType === 'movie' ? 'Kino' : 'Serial'}\n` +
             `🆔 Kod: ${code}\n\n` +
             'Foydalanuvchilarga ham yuborish uchun "Kino premyera" ni qayta bosing.',
           {
-            parse_mode: 'Markdown',
             reply_markup: AdminKeyboard.getAdminMainMenu(
               admin?.role || 'ADMIN',
             ),

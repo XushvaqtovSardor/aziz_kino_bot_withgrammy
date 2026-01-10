@@ -16,11 +16,14 @@
     "incremental": true,
     "skipLibCheck": true,
     "strictNullChecks": false,
-    "forceConsistentCasingInFileNames": true,
+    "forceConsistentCasingInFileNames": false,
     "noImplicitAny": false,
     "strictBindCallApply": false,
     "noFallthroughCasesInSwitch": false,
     "resolveJsonModule": true,
+    "strict": false,
+    "noUnusedLocals": false,
+    "noUnusedParameters": false,
     "paths": {
       "generated/*": ["generated/*"]
     }

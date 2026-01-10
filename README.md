@@ -66,7 +66,7 @@ docker compose logs -f app
 
 ### Digital Ocean Deployment
 
-See [DIGITAL_OCEAN_DEPLOY.md](./DIGITAL_OCEAN_DEPLOY.md) for complete deployment guide.
+See [QUICK_DEPLOY.md](./QUICK_DEPLOY.md) for one-command deployment or [DIGITAL_OCEAN_DEPLOY.md](./DIGITAL_OCEAN_DEPLOY.md) for complete guide.
 
 **Quick Deploy:**
 ```bash
@@ -76,27 +76,15 @@ cd aziz_kino_bot_withgrammy
 cp .env.example .env
 nano .env  # Configure settings
 docker compose up -d
+docker compose exec app npx prisma migrate deploy
 ```
 
-## 🐳 Docker Deployment
+## 📚 Documentation
 
-<<<<<<< HEAD
-### Railway (Recommended for beginners)
-
-**Easiest way to deploy!**
-
-1. Push to GitHub:
-   ```bash
-   git push origin main
-   ```
-
-2. Deploy on [Railway](https://railway.app):
-   - Click "New Project" → "Deploy from GitHub repo"
-   - Add PostgreSQL database
-   - Set environment variables
-   - Done! ✨
-
-See [RAILWAY.md](./RAILWAY.md) for detailed guide.
+- [Quick Deploy Guide](./QUICK_DEPLOY.md) - Fast deployment in 5 minutes
+- [Complete Deployment Guide](./DIGITAL_OCEAN_DEPLOY.md) - Step-by-step instructions
+- [Deployment Checklist](./DEPLOYMENT_CHECKLIST.md) - Pre/post deployment tasks
+- [Architecture Overview](./ARCHITECTURE.md) - System design and structure
 
 ### Using Docker Compose
 =======
