@@ -3635,8 +3635,21 @@ ${existingSerial.description || ''}
       }
 
       // Get admin info
-      const admin = await this.adminService.getAdminByTelegramId(ctx.from.id);
+      this.logger.log(`Fetching admin with telegramId: ${ctx.from.id}`);
+      let admin;
+      try {
+        admin = await this.adminService.getAdminByTelegramId(ctx.from.id);
+      } catch (adminError) {
+        this.logger.error('Error fetching admin:', adminError);
+        this.logger.error(
+          'Admin error details:',
+          JSON.stringify(adminError, null, 2),
+        );
+        throw adminError;
+      }
+
       if (!admin) {
+        this.logger.warn(`Admin not found for telegramId: ${ctx.from.id}`);
         await ctx.reply('⛔️ Admin topilmadi.');
         return;
       }
@@ -3661,12 +3674,22 @@ ${existingSerial.description || ''}
       );
     } catch (error) {
       this.logger.error('Error starting premiere broadcast:', error);
-      this.logger.error('Error details:', {
-        message: error?.message,
-        stack: error?.stack,
-        name: error?.name,
-      });
-      await ctx.reply('❌ Xatolik yuz berdi.');
+      this.logger.error('Error message:', error?.message);
+      this.logger.error('Error name:', error?.name);
+      this.logger.error('Error stack:', error?.stack);
+      try {
+        this.logger.error(
+          'Full error object:',
+          JSON.stringify(error, Object.getOwnPropertyNames(error), 2),
+        );
+      } catch (jsonError) {
+        this.logger.error('Could not stringify error');
+      }
+      try {
+        await ctx.reply('❌ Xatolik yuz berdi.');
+      } catch (replyError) {
+        this.logger.error('Could not send error reply:', replyError);
+      }
     }
   }
 
@@ -3918,8 +3941,21 @@ ${existingSerial.description || ''}
         await ctx.answerCallbackQuery();
       }
 
-      const admin = await this.adminService.getAdminByTelegramId(ctx.from.id);
+      this.logger.log(`Fetching admin with telegramId: ${ctx.from.id}`);
+      let admin;
+      try {
+        admin = await this.adminService.getAdminByTelegramId(ctx.from.id);
+      } catch (adminError) {
+        this.logger.error('Error fetching admin:', adminError);
+        this.logger.error(
+          'Admin error details:',
+          JSON.stringify(adminError, null, 2),
+        );
+        throw adminError;
+      }
+
       if (!admin) {
+        this.logger.warn(`Admin not found for telegramId: ${ctx.from.id}`);
         await ctx.reply('⛔️ Admin topilmadi.');
         return;
       }
@@ -3960,12 +3996,22 @@ ${existingSerial.description || ''}
       );
     } catch (error) {
       this.logger.error('Error starting Telegram Premium broadcast:', error);
-      this.logger.error('Error details:', {
-        message: error?.message,
-        stack: error?.stack,
-        name: error?.name,
-      });
-      await ctx.reply('❌ Xatolik yuz berdi.');
+      this.logger.error('Error message:', error?.message);
+      this.logger.error('Error name:', error?.name);
+      this.logger.error('Error stack:', error?.stack);
+      try {
+        this.logger.error(
+          'Full error object:',
+          JSON.stringify(error, Object.getOwnPropertyNames(error), 2),
+        );
+      } catch (jsonError) {
+        this.logger.error('Could not stringify error');
+      }
+      try {
+        await ctx.reply('❌ Xatolik yuz berdi.');
+      } catch (replyError) {
+        this.logger.error('Could not send error reply:', replyError);
+      }
     }
   }
 
