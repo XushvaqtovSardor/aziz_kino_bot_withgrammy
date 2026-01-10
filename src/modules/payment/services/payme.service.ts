@@ -34,7 +34,7 @@ export class PaymeService {
     // Generate payment URL
     const paymentUrl = `https://checkout.paycom.uz/${params}`;
 
-    this.logger.log(
+    this.logger.debug(
       `Generated Payme payment link for payment ${paymentId}: ${paymentUrl}`,
     );
     return paymentUrl;
@@ -60,7 +60,7 @@ export class PaymeService {
    * Handle Payme webhook
    */
   async handleWebhook(body: any) {
-    this.logger.log('Handling Payme webhook', body);
+    this.logger.debug('Handling Payme webhook', body);
 
     const { method, params } = body;
 

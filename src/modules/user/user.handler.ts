@@ -42,7 +42,7 @@ export class UserHandler implements OnModuleInit {
 
   onModuleInit() {
     this.registerHandlers();
-    this.logger.log('User handlers registered with Grammy');
+    this.logger.debug('User handlers registered with Grammy');
   }
 
   private registerHandlers() {
@@ -135,7 +135,7 @@ export class UserHandler implements OnModuleInit {
     if (!ctx.from) return;
 
     const payload = ctx.match;
-    this.logger.log(
+    this.logger.debug(
       `User ${ctx.from.id} started bot with payload: ${payload || 'none'}`,
     );
 
@@ -561,7 +561,7 @@ To'lov qilgandan keyin chekni botga yuboring.
       const photo = ctx.message.photo[ctx.message.photo.length - 1];
       const fileId = photo.file_id;
 
-      this.logger.log(`User ${userId} uploaded receipt: ${fileId}`);
+      this.logger.debug(`User ${userId} uploaded receipt: ${fileId}`);
 
       // Get user from database
       const user = await this.userService.findByTelegramId(String(userId));
@@ -761,7 +761,7 @@ Savollaringiz bo'lsa murojaat qiling:
 
     const text = ctx.message.text;
 
-    this.logger.log(
+    this.logger.debug(
       `[handleTextMessage] Received text: "${text}" from user ${ctx.from?.id}`,
     );
 
@@ -775,18 +775,18 @@ Savollaringiz bo'lsa murojaat qiling:
       text.includes('🎬') ||
       text.includes('📺')
     ) {
-      this.logger.log(`[handleTextMessage] Skipping button/command text`);
+      this.logger.debug(`[handleTextMessage] Skipping button/command text`);
       return;
     }
 
     // Try to parse as code
     const code = parseInt(text);
     if (!isNaN(code) && code > 0) {
-      this.logger.log(
+      this.logger.debug(
         `[handleTextMessage] Parsed as code: ${code}, calling handleCodeSearch`,
       );
       await this.handleCodeSearch(ctx, code);
-      this.logger.log(
+      this.logger.debug(
         `[handleTextMessage] handleCodeSearch completed for code: ${code}`,
       );
     }
@@ -796,7 +796,7 @@ Savollaringiz bo'lsa murojaat qiling:
   private async handleCodeSearch(ctx: BotContext, code: number) {
     if (!ctx.from) return;
 
-    this.logger.log(
+    this.logger.debug(
       `[handleCodeSearch] User ${ctx.from.id} searching for code: ${code}`,
     );
 
@@ -810,7 +810,7 @@ Savollaringiz bo'lsa murojaat qiling:
     const premiumStatus = await this.premiumService.checkPremiumStatus(user.id);
     const isPremium = premiumStatus.isPremium && !premiumStatus.isExpired;
 
-    this.logger.log(
+    this.logger.debug(
       `[handleCodeSearch] User ${ctx.from.id} premium status: ${isPremium}`,
     );
 
@@ -818,7 +818,7 @@ Savollaringiz bo'lsa murojaat qiling:
     if (!isPremium) {
       const hasSubscription = await this.checkSubscription(ctx, code, 'search');
       if (!hasSubscription) {
-        this.logger.log(
+        this.logger.debug(
           `[handleCodeSearch] User ${ctx.from.id} not subscribed`,
         );
         return;
@@ -828,7 +828,7 @@ Savollaringiz bo'lsa murojaat qiling:
     // Try to find movie
     const movie = await this.movieService.findByCode(String(code));
     if (movie) {
-      this.logger.log(
+      this.logger.debug(
         `[handleCodeSearch] Found movie: ${movie.title} (${code})`,
       );
       await this.sendMovieToUser(ctx, code);
@@ -838,14 +838,14 @@ Savollaringiz bo'lsa murojaat qiling:
     // Try to find serial
     const serial = await this.serialService.findByCode(String(code));
     if (serial) {
-      this.logger.log(
+      this.logger.debug(
         `[handleCodeSearch] Found serial: ${serial.title} (${code})`,
       );
       await this.sendSerialToUser(ctx, code);
       return;
     }
 
-    this.logger.log(`[handleCodeSearch] Movie/serial not found: ${code}`);
+    this.logger.debug(`[handleCodeSearch] Movie/serial not found: ${code}`);
     await ctx.reply(`❌ ${code} kodli kino yoki serial topilmadi.`);
   }
 
@@ -953,7 +953,7 @@ Savollaringiz bo'lsa murojaat qiling:
         }
       }
 
-      this.logger.log(`User ${ctx.from.id} watched movie ${code}`);
+      this.logger.debug(`User ${ctx.from.id} watched movie ${code}`);
     } catch (error) {
       this.logger.error(`Error sending movie ${code}:`, error);
       this.logger.error(`Error stack:`, error.stack);
@@ -1020,7 +1020,7 @@ Savollaringiz bo'lsa murojaat qiling:
         reply_markup: keyboard,
       });
 
-      this.logger.log(`User ${ctx.from.id} requested serial ${code}`);
+      this.logger.debug(`User ${ctx.from.id} requested serial ${code}`);
     } catch (error) {
       this.logger.error(`Error sending serial ${code}:`, error);
       await ctx.reply(
@@ -1047,7 +1047,7 @@ Savollaringiz bo'lsa murojaat qiling:
       this.joinRequestCache,
     );
 
-    this.logger.log(
+    this.logger.debug(
       `User ${ctx.from.id} subscription check: ${status.subscribedCount}/${status.totalChannels} subscribed, ${status.unsubscribedCount} unsubscribed (${status.unsubscribedChannels.filter((ch) => ch.isExternal).length} external)`,
     );
 
@@ -1142,7 +1142,7 @@ Savollaringiz bo'lsa murojaat qiling:
       this.joinRequestCache,
     );
 
-    this.logger.log(
+    this.logger.debug(
       `[CheckSubscription] User ${ctx.from.id}: ${status.subscribedCount}/${status.totalChannels} subscribed, ${status.unsubscribedCount} unsubscribed`,
     );
 
@@ -1398,7 +1398,7 @@ Savollaringiz bo'lsa murojaat qiling:
         }
       }
 
-      this.logger.log(
+      this.logger.debug(
         `User ${ctx.from.id} watched episode ${episodeNumber} of serial ${serialId}`,
       );
     } catch (error) {
@@ -1518,7 +1518,7 @@ Savollaringiz bo'lsa murojaat qiling:
         }
       }
 
-      this.logger.log(
+      this.logger.debug(
         `User ${ctx.from.id} watched episode ${episodeNumber} of movie ${movieId}`,
       );
     } catch (error) {

@@ -57,14 +57,18 @@ export class PrismaService
       this.logger.warn('Database warning:', e);
     });
 
-    this.logger.log(` Initializing database connection...`);
-    this.logger.debug(` Database URL: ${maskedUrl}`);
+    if (process.env.NODE_ENV !== 'production') {
+      this.logger.log(` Initializing database connection...`);
+      this.logger.debug(` Database URL: ${maskedUrl}`);
+    }
   }
 
   async onModuleInit() {
     try {
       await this.$connect();
-      this.logger.log('Database connected successfully');
+      if (process.env.NODE_ENV !== 'production') {
+        this.logger.log('Database connected successfully');
+      }
     } catch (error) {
       this.logger.error(' Database connection failed');
       this.logger.error(`Error details: ${error.message}`);
@@ -80,7 +84,9 @@ export class PrismaService
     try {
       await this.$disconnect();
       await this.pool.end();
-      this.logger.log('Database disconnected successfully');
+      if (process.env.NODE_ENV !== 'production') {
+        this.logger.log('Database disconnected successfully');
+      }
     } catch (error) {
       this.logger.error(' Error disconnecting database:', error);
     }

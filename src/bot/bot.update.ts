@@ -19,7 +19,7 @@ export class BotUpdate implements OnModuleInit {
       this.checkSubscription.bind(this),
     );
 
-    this.logger.log('Bot handlers registered');
+    this.logger.debug('Bot handlers registered');
   }
 
   private async checkSubscription(ctx: BotContext) {
@@ -60,10 +60,10 @@ export class BotUpdate implements OnModuleInit {
     }
 
     if (notJoined.length === 0) {
-      this.logger.log(`User ${ctx.from.id} is subscribed to all channels`);
+      this.logger.debug(`User ${ctx.from.id} is subscribed to all channels`);
       await ctx.editMessageText("✅ Siz barcha kanallarga obuna bo'lgansiz!");
     } else {
-      this.logger.log(
+      this.logger.debug(
         `User ${ctx.from.id} not subscribed to ${notJoined.length} channels`,
       );
     }

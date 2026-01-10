@@ -35,7 +35,7 @@ export class PaymentController {
     @Body() body: { telegramId: string; amount: number; duration?: number },
   ) {
     try {
-      this.logger.log('Creating payment', body);
+      this.logger.debug('Creating payment', body);
 
       // Validate input
       if (!body.telegramId || !body.amount) {
@@ -76,7 +76,7 @@ export class PaymentController {
   @HttpCode(HttpStatus.OK)
   async handlePaymeWebhook(@Headers() headers: any, @Body() body: any) {
     try {
-      this.logger.log('Received Payme webhook', body);
+      this.logger.debug('Received Payme webhook', body);
 
       // Verify webhook signature
       const isValid = this.paymeService.verifySignature({ headers });
@@ -111,7 +111,7 @@ export class PaymentController {
   @HttpCode(HttpStatus.OK)
   async testWebhook(@Body() body: { paymentId: number; status: string }) {
     try {
-      this.logger.log('Test webhook received', body);
+      this.logger.debug('Test webhook received', body);
 
       if (body.status === 'success') {
         // Process payment
@@ -203,7 +203,7 @@ export class PaymentController {
           message,
         );
 
-        this.logger.log(
+        this.logger.debug(
           `Payment success notification sent to user ${payment.user.telegramId}`,
         );
       }

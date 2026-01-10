@@ -137,7 +137,7 @@ export class PaymentService {
     duration?: number;
     provider?: string;
   }) {
-    this.logger.log(
+    this.logger.debug(
       `Creating online payment for user ${data.telegramId}, amount: ${data.amount}`,
     );
 
@@ -164,7 +164,7 @@ export class PaymentService {
       },
     });
 
-    this.logger.log(`Online payment created: ${payment.id}`);
+    this.logger.debug(`Online payment created: ${payment.id}`);
     return payment;
   }
 
@@ -175,7 +175,7 @@ export class PaymentService {
     paymentId?: number;
     transactionId?: string;
   }) {
-    this.logger.log(`Processing successful payment`, data);
+    this.logger.debug(`Processing successful payment`, data);
 
     // Find payment by ID or transaction ID
     const payment = await this.prisma.payment.findFirst({
@@ -217,7 +217,7 @@ export class PaymentService {
       include: { user: true },
     });
 
-    this.logger.log(
+    this.logger.debug(
       `Payment ${payment.id} processed successfully. User ${payment.user.telegramId} premium until ${premiumTill}`,
     );
 
@@ -228,7 +228,7 @@ export class PaymentService {
    * Mark payment as failed
    */
   async markPaymentFailed(paymentId: number, reason?: string) {
-    this.logger.log(`Marking payment ${paymentId} as failed`);
+    this.logger.debug(`Marking payment ${paymentId} as failed`);
 
     const payment = await this.prisma.payment.update({
       where: { id: paymentId },

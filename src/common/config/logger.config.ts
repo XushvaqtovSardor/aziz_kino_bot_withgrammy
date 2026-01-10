@@ -60,7 +60,7 @@ export const loggerConfig = WinstonModule.createLogger({
     // Console transport with colors
     new winston.transports.Console({
       format: consoleFormat,
-      level: process.env.NODE_ENV === 'production' ? 'info' : 'debug',
+      level: process.env.NODE_ENV === 'production' ? 'error' : 'debug',
     }),
     // File transports
     errorFileTransport,
