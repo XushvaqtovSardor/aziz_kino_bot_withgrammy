@@ -27,6 +27,7 @@ import { AdminKeyboard } from './keyboards/admin-menu.keyboard';
 @Injectable()
 export class AdminHandler implements OnModuleInit {
   private readonly logger = new Logger(AdminHandler.name);
+  private readonly isDevelopment = process.env.NODE_ENV !== 'production';
 
   constructor(
     private adminService: AdminService,
@@ -48,7 +49,9 @@ export class AdminHandler implements OnModuleInit {
 
   onModuleInit() {
     this.registerHandlers();
-    this.logger.log('Admin handlers registered with Grammy');
+    if (this.isDevelopment) {
+      this.logger.debug('Admin handlers registered with Grammy');
+    }
   }
 
   private registerHandlers() {
@@ -58,11 +61,11 @@ export class AdminHandler implements OnModuleInit {
     bot.command('admin', async (ctx) => {
       if (!ctx.from) return;
 
-      this.logger.log(`[/admin] Command received from user ${ctx.from.id}`);
+      this.logger.debug(`[/admin] Command received from user ${ctx.from.id}`);
 
       const admin = await this.getAdmin(ctx);
       if (admin) {
-        this.logger.log(
+        this.logger.debug(
           `[/admin] Admin verified: ${admin.telegramId}, showing admin panel`,
         );
         await this.handleAdminStart(ctx, admin);
@@ -442,7 +445,7 @@ export class AdminHandler implements OnModuleInit {
     bot.callbackQuery('broadcast_premiere', async (ctx) => {
       const admin = await this.getAdmin(ctx);
       if (admin) {
-        this.logger.log('🎬 Premiere broadcast button clicked');
+        this.logger.debug('🎬 Premiere broadcast button clicked');
         await this.startPremiereBroadcast(ctx);
       }
     });
@@ -450,7 +453,7 @@ export class AdminHandler implements OnModuleInit {
     bot.callbackQuery('broadcast_telegram_premium', async (ctx) => {
       const admin = await this.getAdmin(ctx);
       if (admin) {
-        this.logger.log('⭐️ Telegram Premium broadcast button clicked');
+        this.logger.debug('⭐️ Telegram Premium broadcast button clicked');
         await this.startTelegramPremiumBroadcast(ctx);
       }
     });
@@ -516,7 +519,7 @@ export class AdminHandler implements OnModuleInit {
       String(ctx.from.id),
     );
     if (admin) {
-      this.logger.log(
+      this.logger.debug(
         `[getAdmin] Found admin: ${admin.telegramId} (${admin.role})`,
       );
     } else {
@@ -537,7 +540,7 @@ export class AdminHandler implements OnModuleInit {
 
   // ==================== START COMMAND ====================
   private async handleAdminStart(ctx: BotContext, admin: any) {
-    this.logger.log(
+    this.logger.debug(
       `[handleAdminStart] Showing admin panel for ${admin.telegramId}`,
     );
 
@@ -628,7 +631,7 @@ export class AdminHandler implements OnModuleInit {
 
   // ==================== MOVIE CREATION ====================
   private async startMovieCreation(ctx: BotContext) {
-    this.logger.log(`Admin ${ctx.from?.id} starting movie creation`);
+    this.logger.debug(`Admin ${ctx.from?.id} starting movie creation`);
 
     const admin = await this.getAdmin(ctx);
     if (!admin || !ctx.from) {
@@ -2295,7 +2298,7 @@ export class AdminHandler implements OnModuleInit {
         AdminKeyboard.getAdminMainMenu(admin.role),
       );
 
-      this.logger.log(
+      this.logger.debug(
         `[handleContactMessageEditing] Admin ${admin.telegramId} updated contact message`,
       );
     } catch (error) {
@@ -2382,7 +2385,7 @@ Qaysi guruhga xabar yubormoqchisiz?
     }
 
     try {
-      this.logger.log(
+      this.logger.debug(
         `[showWebPanel] Admin ${admin.telegramId} requesting web panel link`,
       );
 
@@ -2392,7 +2395,7 @@ Qaysi guruhga xabar yubormoqchisiz?
         `http://localhost:${process.env.PORT || 3001}`;
       const adminPanelUrl = `${webPanelUrl}/admin?token=${admin.telegramId}`;
 
-      this.logger.log(`[showWebPanel] Generated URL: ${adminPanelUrl}`);
+      this.logger.debug(`[showWebPanel] Generated URL: ${adminPanelUrl}`);
 
       const keyboard = new InlineKeyboard()
         .url("🌐 Admin Panelga o'tish", adminPanelUrl)
@@ -2408,7 +2411,7 @@ Qaysi guruhga xabar yubormoqchisiz?
         },
       );
 
-      this.logger.log(
+      this.logger.debug(
         `[showWebPanel] Web panel link sent successfully to ${admin.telegramId}`,
       );
     } catch (error) {
@@ -3615,7 +3618,7 @@ Qaysi rol berasiz?
 
   private async startPremiereBroadcast(ctx: any) {
     try {
-      this.logger.log('🎬 Starting premiere broadcast...');
+      this.logger.debug('🎬 Starting premiere broadcast...');
 
       // Answer callback query first
       if (ctx.callbackQuery) {
@@ -3623,7 +3626,7 @@ Qaysi rol berasiz?
       }
 
       // Get admin info
-      this.logger.log(`Fetching admin with telegramId: ${ctx.from.id}`);
+      this.logger.debug(`Fetching admin with telegramId: ${ctx.from.id}`);
       let admin;
       try {
         admin = await this.adminService.getAdminByTelegramId(
@@ -3644,7 +3647,7 @@ Qaysi rol berasiz?
         await ctx.reply('⛔️ Admin topilmadi.');
         return;
       }
-      this.logger.log(`Admin found: ${admin.username || admin.telegramId}`);
+      this.logger.debug(`Admin found: ${admin.username || admin.telegramId}`);
 
       // Start session
       this.sessionService.startSession(
@@ -3687,7 +3690,7 @@ Qaysi rol berasiz?
     session: any,
   ) {
     try {
-      this.logger.log(`📝 Premiere broadcast step - received text: ${text}`);
+      this.logger.debug(`📝 Premiere broadcast step - received text: ${text}`);
       // Check for cancel
       if (text === '❌ Bekor qilish') {
         this.sessionService.clearSession(ctx.from.id);
@@ -3926,14 +3929,14 @@ Qaysi rol berasiz?
 
   private async startTelegramPremiumBroadcast(ctx: any) {
     try {
-      this.logger.log('⭐️ Starting Telegram Premium broadcast...');
+      this.logger.debug('⭐️ Starting Telegram Premium broadcast...');
 
       // Answer callback query first
       if (ctx.callbackQuery) {
         await ctx.answerCallbackQuery();
       }
 
-      this.logger.log(`Fetching admin with telegramId: ${ctx.from.id}`);
+      this.logger.debug(`Fetching admin with telegramId: ${ctx.from.id}`);
       let admin;
       try {
         admin = await this.adminService.getAdminByTelegramId(
@@ -3954,7 +3957,7 @@ Qaysi rol berasiz?
         await ctx.reply('⛔️ Admin topilmadi.');
         return;
       }
-      this.logger.log(`Admin found: ${admin.username || admin.telegramId}`);
+      this.logger.debug(`Admin found: ${admin.username || admin.telegramId}`);
 
       // Get count of Telegram Premium users
       let premiumUserCount = 0;
@@ -3965,7 +3968,7 @@ Qaysi rol berasiz?
             isBlocked: false,
           },
         });
-        this.logger.log(`Found ${premiumUserCount} Telegram Premium users`);
+        this.logger.debug(`Found ${premiumUserCount} Telegram Premium users`);
       } catch (dbError) {
         this.logger.error('Database error counting premium users:', dbError);
         // Continue with count = 0
@@ -4013,7 +4016,7 @@ Qaysi rol berasiz?
     session: any,
   ) {
     try {
-      this.logger.log(
+      this.logger.debug(
         `📝 Telegram Premium broadcast step - received text: ${text}`,
       );
       // Check for cancel
