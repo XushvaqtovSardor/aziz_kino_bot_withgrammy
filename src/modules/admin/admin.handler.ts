@@ -3661,6 +3661,11 @@ ${existingSerial.description || ''}
       );
     } catch (error) {
       this.logger.error('Error starting premiere broadcast:', error);
+      this.logger.error('Error details:', {
+        message: error?.message,
+        stack: error?.stack,
+        name: error?.name,
+      });
       await ctx.reply('❌ Xatolik yuz berdi.');
     }
   }
@@ -3921,12 +3926,19 @@ ${existingSerial.description || ''}
       this.logger.log(`Admin found: ${admin.username || admin.telegramId}`);
 
       // Get count of Telegram Premium users
-      const premiumUserCount = await this.prisma.user.count({
-        where: {
-          hasTelegramPremium: true,
-          isBlocked: false,
-        },
-      });
+      let premiumUserCount = 0;
+      try {
+        premiumUserCount = await this.prisma.user.count({
+          where: {
+            hasTelegramPremium: true,
+            isBlocked: false,
+          },
+        });
+        this.logger.log(`Found ${premiumUserCount} Telegram Premium users`);
+      } catch (dbError) {
+        this.logger.error('Database error counting premium users:', dbError);
+        // Continue with count = 0
+      }
 
       // Start session
       this.sessionService.startSession(
@@ -3948,6 +3960,11 @@ ${existingSerial.description || ''}
       );
     } catch (error) {
       this.logger.error('Error starting Telegram Premium broadcast:', error);
+      this.logger.error('Error details:', {
+        message: error?.message,
+        stack: error?.stack,
+        name: error?.name,
+      });
       await ctx.reply('❌ Xatolik yuz berdi.');
     }
   }
