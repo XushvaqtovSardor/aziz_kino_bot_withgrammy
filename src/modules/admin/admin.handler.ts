@@ -390,7 +390,9 @@ export class AdminHandler implements OnModuleInit {
       const admin = await this.getAdmin(ctx);
       if (admin) {
         await ctx.answerCallbackQuery('❌ Bekor qilindi');
-        await ctx.editMessageReplyMarkup({ reply_markup: { inline_keyboard: [] } });
+        await ctx.editMessageReplyMarkup({
+          reply_markup: { inline_keyboard: [] },
+        });
         await ctx.reply(
           '❌ Tarixni tozalash bekor qilindi.',
           AdminKeyboard.getAdminMainMenu(admin.role),
@@ -3718,6 +3720,10 @@ ${existingSerial.description || ''}
           where: { id: content.fieldId },
         }));
 
+      // Get bot username
+      const botInfo = await ctx.api.getMe();
+      const botUsername = botInfo.username || 'bot';
+
       // Ask if admin wants to send to field channel
       const keyboard = new InlineKeyboard()
         .text(
@@ -3741,7 +3747,7 @@ ${existingSerial.description || ''}
         `├‣ Janrlari: ${content.genre || "Noma'lum"}\n` +
         `├‣ Kanal: @${field?.name || 'Kanal'}\n` +
         '╰────────────────────\n' +
-        `▶️ ${isSerial ? 'Serialning' : 'Kinoning'} to'liq qismini @${ctx.me.username} dan tomosha qilishingiz mumkin!`;
+        `▶️ ${isSerial ? 'Serialning' : 'Kinoning'} to'liq qismini @${botUsername} dan tomosha qilishingiz mumkin!`;
 
       // Send preview to admin
       if (content.posterFileId) {
@@ -3811,7 +3817,9 @@ ${existingSerial.description || ''}
       let successCount = 0;
       let failCount = 0;
 
-      await ctx.editMessageReplyMarkup({ reply_markup: { inline_keyboard: [] } });
+      await ctx.editMessageReplyMarkup({
+        reply_markup: { inline_keyboard: [] },
+      });
       const statusMsg = await ctx.reply(
         `📤 Yuborish boshlandi...\n\n👥 Jami: ${users.length}\n✅ Yuborildi: 0\n❌ Xatolik: 0`,
       );
@@ -4011,7 +4019,9 @@ ${existingSerial.description || ''}
       let successCount = 0;
       let failCount = 0;
 
-      await ctx.editMessageReplyMarkup({ reply_markup: { inline_keyboard: [] } });
+      await ctx.editMessageReplyMarkup({
+        reply_markup: { inline_keyboard: [] },
+      });
       const statusMsg = await ctx.reply(
         `📤 Yuborish boshlandi...\n\n👥 Jami: ${telegramPremiumUsers.length}\n✅ Yuborildi: 0\n❌ Xatolik: 0`,
       );
@@ -4126,9 +4136,10 @@ ${existingSerial.description || ''}
 
       await ctx.reply(
         '🚫 **Foydalanuvchini bloklash**\n\n' +
-          "Bloklash uchun foydalanuvchining username'ini kiriting:\n" +
-          '(@ belgisi bilan yoki belgisisiz)\n\n' +
-          'Masalan: @username yoki username',
+          'Bloklash uchun foydalanuvchining username yoki Telegram ID raqamini kiriting:\n\n' +
+          '📝 Username: @username yoki username\n' +
+          '🆔 Telegram ID: 123456789\n\n' +
+          'Ikkalasidan birini kiriting.',
         {
           parse_mode: 'Markdown',
           reply_markup: {
@@ -4156,18 +4167,29 @@ ${existingSerial.description || ''}
         return;
       }
 
-      // Parse username (remove @ if exists)
-      const username = text.startsWith('@') ? text.substring(1) : text;
+      // Check if input is numeric (Telegram ID) or text (username)
+      const isNumeric = /^\d+$/.test(text.trim());
+      let user;
 
-      // Find user by username
-      const user = await this.prisma.user.findFirst({
-        where: { username: username },
-      });
+      if (isNumeric) {
+        // Search by Telegram ID
+        const telegramId = text.trim();
+        user = await this.prisma.user.findFirst({
+          where: { telegramId: telegramId },
+        });
+      } else {
+        // Parse username (remove @ if exists)
+        const username = text.startsWith('@') ? text.substring(1) : text;
+        // Search by username
+        user = await this.prisma.user.findFirst({
+          where: { username: username },
+        });
+      }
 
       if (!user) {
         await ctx.reply(
           '❌ Foydalanuvchi topilmadi!\n\n' +
-            "Iltimos, to'g'ri username kiriting:",
+            "Iltimos, to'g'ri username yoki Telegram ID kiriting:",
         );
         return;
       }
@@ -4251,7 +4273,9 @@ ${existingSerial.description || ''}
       this.sessionService.clearSession(ctx.from.id);
 
       // Edit message to remove buttons
-      await ctx.editMessageReplyMarkup({ reply_markup: { inline_keyboard: [] } });
+      await ctx.editMessageReplyMarkup({
+        reply_markup: { inline_keyboard: [] },
+      });
 
       const admin = await this.adminService.getAdminByTelegramId(ctx.from.id);
       await ctx.reply(
@@ -4285,9 +4309,10 @@ ${existingSerial.description || ''}
 
       await ctx.reply(
         '✅ **Foydalanuvchini blokdan ochish**\n\n' +
-          "Blokdan ochish uchun foydalanuvchining username'ini kiriting:\n" +
-          '(@ belgisi bilan yoki belgisisiz)\n\n' +
-          'Masalan: @username yoki username',
+          'Blokdan ochish uchun foydalanuvchining username yoki Telegram ID raqamini kiriting:\n\n' +
+          '📝 Username: @username yoki username\n' +
+          '🆔 Telegram ID: 123456789\n\n' +
+          'Ikkalasidan birini kiriting.',
         {
           parse_mode: 'Markdown',
           reply_markup: {
@@ -4315,18 +4340,29 @@ ${existingSerial.description || ''}
         return;
       }
 
-      // Parse username (remove @ if exists)
-      const username = text.startsWith('@') ? text.substring(1) : text;
+      // Check if input is numeric (Telegram ID) or text (username)
+      const isNumeric = /^\d+$/.test(text.trim());
+      let user;
 
-      // Find user by username
-      const user = await this.prisma.user.findFirst({
-        where: { username: username },
-      });
+      if (isNumeric) {
+        // Search by Telegram ID
+        const telegramId = text.trim();
+        user = await this.prisma.user.findFirst({
+          where: { telegramId: telegramId },
+        });
+      } else {
+        // Parse username (remove @ if exists)
+        const username = text.startsWith('@') ? text.substring(1) : text;
+        // Search by username
+        user = await this.prisma.user.findFirst({
+          where: { username: username },
+        });
+      }
 
       if (!user) {
         await ctx.reply(
           '❌ Foydalanuvchi topilmadi!\n\n' +
-            "Iltimos, to'g'ri username kiriting:",
+            "Iltimos, to'g'ri username yoki Telegram ID kiriting:",
         );
         return;
       }
@@ -4411,7 +4447,9 @@ ${existingSerial.description || ''}
       this.sessionService.clearSession(ctx.from.id);
 
       // Edit message to remove buttons
-      await ctx.editMessageReplyMarkup({ reply_markup: { inline_keyboard: [] } });
+      await ctx.editMessageReplyMarkup({
+        reply_markup: { inline_keyboard: [] },
+      });
 
       const admin = await this.adminService.getAdminByTelegramId(ctx.from.id);
       await ctx.reply(
@@ -4657,7 +4695,9 @@ ${existingSerial.description || ''}
       this.sessionService.clearSession(ctx.from.id);
 
       // Edit message to remove buttons
-      await ctx.editMessageReplyMarkup({ reply_markup: { inline_keyboard: [] } });
+      await ctx.editMessageReplyMarkup({
+        reply_markup: { inline_keyboard: [] },
+      });
 
       const admin = await this.adminService.getAdminByTelegramId(ctx.from.id);
       await ctx.reply(
@@ -4677,7 +4717,9 @@ ${existingSerial.description || ''}
   private async cancelUnbanPremium(ctx: any) {
     try {
       await ctx.answerCallbackQuery();
-      await ctx.editMessageReplyMarkup({ reply_markup: { inline_keyboard: [] } });
+      await ctx.editMessageReplyMarkup({
+        reply_markup: { inline_keyboard: [] },
+      });
 
       this.sessionService.clearSession(ctx.from.id);
 
@@ -4811,7 +4853,9 @@ ${existingSerial.description || ''}
 
     try {
       await ctx.answerCallbackQuery();
-      await ctx.editMessageReplyMarkup({ reply_markup: { inline_keyboard: [] } });
+      await ctx.editMessageReplyMarkup({
+        reply_markup: { inline_keyboard: [] },
+      });
 
       const movie = await this.prisma.movie.findUnique({
         where: { code: parseInt(code) },
@@ -4861,7 +4905,9 @@ ${existingSerial.description || ''}
 
     try {
       await ctx.answerCallbackQuery();
-      await ctx.editMessageReplyMarkup({ reply_markup: { inline_keyboard: [] } });
+      await ctx.editMessageReplyMarkup({
+        reply_markup: { inline_keyboard: [] },
+      });
 
       const serial = await this.prisma.serial.findUnique({
         where: { code: parseInt(code) },
@@ -4909,7 +4955,9 @@ ${existingSerial.description || ''}
   private async cancelDeleteContent(ctx: any) {
     try {
       await ctx.answerCallbackQuery();
-      await ctx.editMessageReplyMarkup({ reply_markup: { inline_keyboard: [] } });
+      await ctx.editMessageReplyMarkup({
+        reply_markup: { inline_keyboard: [] },
+      });
 
       this.sessionService.clearSession(ctx.from.id);
 
@@ -4952,7 +5000,9 @@ ${existingSerial.description || ''}
   private async confirmClearHistory(ctx: any) {
     try {
       await ctx.answerCallbackQuery('🗑️ Tozalanmoqda...');
-      await ctx.editMessageReplyMarkup({ reply_markup: { inline_keyboard: [] } });
+      await ctx.editMessageReplyMarkup({
+        reply_markup: { inline_keyboard: [] },
+      });
 
       // Delete all inactive channels
       const result = await this.prisma.mandatoryChannel.deleteMany({
@@ -5026,7 +5076,9 @@ ${existingSerial.description || ''}
           await ctx.api.sendMessage(dbChannel.channelId, caption);
         }
 
-        await ctx.editMessageReplyMarkup({ reply_markup: { inline_keyboard: [] } });
+        await ctx.editMessageReplyMarkup({
+          reply_markup: { inline_keyboard: [] },
+        });
 
         const admin = await this.adminService.getAdminByTelegramId(ctx.from.id);
         await ctx.reply(
@@ -5060,7 +5112,9 @@ ${existingSerial.description || ''}
   private async broadcastPremiereToUsers(ctx: any) {
     try {
       await ctx.answerCallbackQuery('📤 Foydalanuvchilarga yuborilmoqda...');
-      await ctx.editMessageReplyMarkup({ reply_markup: { inline_keyboard: [] } });
+      await ctx.editMessageReplyMarkup({
+        reply_markup: { inline_keyboard: [] },
+      });
 
       const session = this.sessionService.getSession(ctx.from.id);
       if (!session || !session.data) {
