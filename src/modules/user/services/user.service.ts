@@ -131,6 +131,24 @@ export class UserService {
     });
   }
 
+  async getPremiumBannedUsers() {
+    return this.prisma.user.findMany({
+      where: { isPremiumBanned: true },
+      orderBy: { premiumBannedAt: 'desc' },
+    });
+  }
+
+  async unbanFromPremium(telegramId: string) {
+    return this.prisma.user.update({
+      where: { telegramId },
+      data: {
+        isPremiumBanned: false,
+        premiumBannedAt: null,
+        premiumBanCount: 0,
+      },
+    });
+  }
+
   private mapLanguageCode(languageCode?: string): Language {
     if (!languageCode) return Language.UZ;
 

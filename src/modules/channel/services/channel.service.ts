@@ -312,6 +312,11 @@ export class ChannelService {
             'is_member' in member &&
             member.is_member);
 
+        // Clear cache if user is now subscribed
+        if (isSubscribed && hasPendingRequest) {
+          joinRequestCache.delete(cacheKey);
+        }
+
         // If subscribed OR has pending request for PRIVATE channel, mark as subscribed
         if (isSubscribed || (hasPendingRequest && channel.type === 'PRIVATE')) {
           subscribedChannels.push({
@@ -320,7 +325,7 @@ export class ChannelService {
             channelName: channel.channelName,
             type: channel.type,
             isSubscribed,
-            hasPendingRequest,
+            hasPendingRequest: hasPendingRequest && !isSubscribed,
           });
         } else {
           unsubscribedChannels.push({

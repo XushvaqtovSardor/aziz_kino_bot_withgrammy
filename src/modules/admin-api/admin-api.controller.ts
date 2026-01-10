@@ -100,6 +100,42 @@ export class AdminApiController {
       );
     }
 
+    // Check if trying to delete themselves
+    if (telegramId === req.admin.telegramId) {
+      throw new HttpException('Cannot delete yourself', HttpStatus.BAD_REQUEST);
+    }
+
+    // Get the admin to be deleted
+    const adminToDelete =
+      await this.adminService.getAdminByTelegramId(telegramId);
+
+    if (!adminToDelete) {
+      throw new HttpException('Admin not found', HttpStatus.NOT_FOUND);
+    }
+
+    // Get current admin details
+    const currentAdmin = await this.adminService.getAdminByTelegramId(
+      req.admin.telegramId,
+    );
+
+    if (!currentAdmin) {
+      throw new HttpException('Current admin not found', HttpStatus.NOT_FOUND);
+    }
+
+    // Check if allowed to delete:
+    // 1. Admin was created by current user
+    // 2. OR admin was created after current user
+    const canDelete =
+      adminToDelete.createdBy === req.admin.telegramId ||
+      adminToDelete.createdAt > currentAdmin.createdAt;
+
+    if (!canDelete) {
+      throw new HttpException(
+        'You can only delete admins you created or admins created after you',
+        HttpStatus.FORBIDDEN,
+      );
+    }
+
     return this.adminService.deleteAdmin(telegramId);
   }
 
@@ -281,6 +317,21 @@ export class AdminApiController {
     return this.paymentService.findPending();
   }
 
+  @Get('payments/approved')
+  async getApprovedPayments() {
+    return this.paymentService.findByStatus('APPROVED');
+  }
+
+  @Get('payments/rejected')
+  async getRejectedPayments() {
+    return this.paymentService.findByStatus('REJECTED');
+  }
+
+  @Get('payments/statistics')
+  async getPaymentStatistics() {
+    return this.paymentService.getStatistics();
+  }
+
   @Put('payments/:id/approve')
   async approvePayment(
     @Request() req,
@@ -325,5 +376,16 @@ export class AdminApiController {
       req.admin.telegramId,
     );
     return this.paymentService.reject(+id, admin!.id, body.reason);
+  }
+
+  // ==================== PREMIUM BANNED USERS ====================
+  @Get('users/premium-banned')
+  async getPremiumBannedUsers() {
+    return this.userService.getPremiumBannedUsers();
+  }
+
+  @Put('users/:telegramId/unban-premium')
+  async unbanPremiumUser(@Param('telegramId') telegramId: string) {
+    return this.userService.unbanFromPremium(telegramId);
   }
 }

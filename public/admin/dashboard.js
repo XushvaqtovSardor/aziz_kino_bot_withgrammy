@@ -193,6 +193,11 @@ async function loadAdmins() {
   try {
     const admins = await apiRequest('/admins');
 
+    const currentAdminTelegramId = adminData.telegramId;
+    const currentAdmin = admins.find(
+      (a) => a.telegramId === currentAdminTelegramId,
+    );
+
     section.innerHTML = `
             <div class="data-table">
                 <div class="table-header">
@@ -206,34 +211,56 @@ async function loadAdmins() {
                             <th>Username</th>
                             <th>Telegram ID</th>
                             <th>Role</th>
+                            <th>Kim qo'shdi</th>
                             <th>Qo'shilgan</th>
                             <th>Amallar</th>
                         </tr>
                     </thead>
                     <tbody>
                         ${admins
-                          .map(
-                            (admin) => `
+                          .map((admin) => {
+                            // Check if can delete: created by current admin OR created after current admin
+                            const canDelete =
+                              currentAdmin &&
+                              (admin.createdBy === currentAdminTelegramId ||
+                                new Date(admin.createdAt) >
+                                  new Date(currentAdmin.createdAt)) &&
+                              admin.telegramId !== currentAdminTelegramId;
+
+                            const roleEmoji =
+                              admin.role === 'SUPERADMIN'
+                                ? '👑'
+                                : admin.role === 'MANAGER'
+                                  ? '👨\u200d💼'
+                                  : '👥';
+
+                            const creatorInfo =
+                              admin.createdBy === currentAdminTelegramId
+                                ? '✅ Siz yaratdingiz'
+                                : admin.createdBy || 'N/A';
+
+                            return `
                             <tr>
                                 <td>${admin.id}</td>
-                                <td>@${admin.username}</td>
+                                <td>@${admin.username || 'N/A'}</td>
                                 <td>${admin.telegramId}</td>
-                                <td><span class="badge badge-info">${admin.role}</span></td>
+                                <td><span class="badge badge-info">${roleEmoji} ${admin.role}</span></td>
+                                <td><small>${creatorInfo}</small></td>
                                 <td>${new Date(admin.createdAt).toLocaleDateString('uz-UZ')}</td>
                                 <td>
                                     ${
-                                      admin.role !== 'SUPERADMIN'
+                                      canDelete
                                         ? `
                                         <button class="action-btn btn-delete" onclick="deleteAdmin('${admin.telegramId}')">
                                             🗑️ O'chirish
                                         </button>
                                     `
-                                        : ''
+                                        : '<span class="badge badge-secondary">O\'chirish mumkin emas</span>'
                                     }
                                 </td>
                             </tr>
-                        `,
-                          )
+                        `;
+                          })
                           .join('')}
                     </tbody>
                 </table>
@@ -965,72 +992,201 @@ async function deleteSerial(id) {
 async function loadPayments() {
   const section = document.getElementById('payments-section');
 
-  try {
-    const payments = await apiRequest('/payments/pending');
+  section.innerHTML = `
+    <div class="payments-tabs">
+      <div class="tab-buttons">
+        <button class="tab-btn active" onclick="showPaymentTab('pending')">📥 Kutilayotgan</button>
+        <button class="tab-btn" onclick="showPaymentTab('approved')">✅ Tasdiqlangan</button>
+        <button class="tab-btn" onclick="showPaymentTab('rejected')">❌ Rad etilgan</button>
+        <button class="tab-btn" onclick="showPaymentTab('statistics')">📊 Statistika</button>
+        <button class="tab-btn" onclick="showPaymentTab('banned')">🚫 Premium Banned</button>
+      </div>
+      <div id="payment-tab-content" class="tab-content"></div>
+    </div>
+  `;
 
-    section.innerHTML = `
-            <div class="data-table">
-                <div class="table-header">
-                    <h2>Kutilayotgan to'lovlar</h2>
-                </div>
-                <table>
-                    <thead>
-                        <tr>
-                            <th>ID</th>
-                            <th>Foydalanuvchi</th>
-                            <th>Summa</th>
-                            <th>Turi</th>
-                            <th>Yuborilgan vaqt</th>
-                            <th>Amallar</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        ${
-                          payments.length === 0
-                            ? `
-                            <tr>
-                                <td colspan="6" style="text-align: center; padding: 40px;">
-                                    Kutilayotgan to'lovlar yo'q
-                                </td>
-                            </tr>
-                        `
-                            : payments
-                                .map(
-                                  (payment) => `
-                            <tr>
-                                <td>${payment.id}</td>
-                                <td>@${payment.user?.username || payment.user?.telegramId}</td>
-                                <td>${payment.amount.toLocaleString()} UZS</td>
-                                <td><span class="badge badge-info">${payment.paymentType}</span></td>
-                                <td>${new Date(payment.createdAt).toLocaleString('uz-UZ')}</td>
-                                <td>
-                                    <button class="action-btn btn-approve" onclick="approvePayment(${payment.id})">
-                                        ✅ Tasdiqlash
-                                    </button>
-                                    <button class="action-btn btn-reject" onclick="rejectPayment(${payment.id})">
-                                        ❌ Rad etish
-                                    </button>
-                                </td>
-                            </tr>
-                        `,
-                                )
-                                .join('')
-                        }
-                    </tbody>
-                </table>
+  await showPaymentTab('pending');
+}
+
+async function showPaymentTab(tab) {
+  // Update active tab button
+  document.querySelectorAll('.tab-btn').forEach((btn, index) => {
+    const tabs = ['pending', 'approved', 'rejected', 'statistics', 'banned'];
+    btn.classList.toggle('active', tabs[index] === tab);
+  });
+
+  const content = document.getElementById('payment-tab-content');
+
+  try {
+    if (tab === 'pending') {
+      const payments = await apiRequest('/payments/pending');
+      content.innerHTML = renderPaymentsTable(payments, 'Kutilayotgan', true);
+    } else if (tab === 'approved') {
+      const payments = await apiRequest('/payments/approved');
+      content.innerHTML = renderPaymentsTable(payments, 'Tasdiqlangan', false);
+    } else if (tab === 'rejected') {
+      const payments = await apiRequest('/payments/rejected');
+      content.innerHTML = renderPaymentsTable(payments, 'Rad etilgan', false);
+    } else if (tab === 'statistics') {
+      const stats = await apiRequest('/payments/statistics');
+      content.innerHTML = `
+        <div class="stats-grid">
+          <div class="stat-card">
+            <div class="stat-icon">📦</div>
+            <div class="stat-info">
+              <p class="stat-value">${stats.totalPayments || 0}</p>
+              <p class="stat-label">Jami to'lovlar</p>
             </div>
-        `;
+          </div>
+          <div class="stat-card">
+            <div class="stat-icon">✅</div>
+            <div class="stat-info">
+              <p class="stat-value">${stats.approvedCount || 0}</p>
+              <p class="stat-label">Tasdiqlangan</p>
+            </div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-icon">❌</div>
+            <div class="stat-info">
+              <p class="stat-value">${stats.rejectedCount || 0}</p>
+              <p class="stat-label">Rad etilgan</p>
+            </div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-icon">⏳</div>
+            <div class="stat-info">
+              <p class="stat-value">${stats.pendingCount || 0}</p>
+              <p class="stat-label">Kutilmoqda</p>
+            </div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-icon">💰</div>
+            <div class="stat-info">
+              <p class="stat-value">${(stats.totalRevenue || 0).toLocaleString()}</p>
+              <p class="stat-label">Jami summa (UZS)</p>
+            </div>
+          </div>
+        </div>
+      `;
+    } else if (tab === 'banned') {
+      const bannedUsers = await apiRequest('/users/premium-banned');
+      content.innerHTML = `
+        <div class="data-table">
+          <div class="table-header">
+            <h3>Premium'dan bloklangan foydalanuvchilar</h3>
+          </div>
+          <table>
+            <thead>
+              <tr>
+                <th>Ism</th>
+                <th>Username</th>
+                <th>Telegram ID</th>
+                <th>Ogohlantirish</th>
+                <th>Bloklangan sana</th>
+                <th>Amallar</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${
+                bannedUsers.length === 0
+                  ? '<tr><td colspan="6" style="text-align: center; padding: 40px;">Premium\'dan bloklangan foydalanuvchilar yo\'q</td></tr>'
+                  : bannedUsers
+                      .map(
+                        (user) => `
+                      <tr>
+                        <td>${user.firstName || 'N/A'}</td>
+                        <td>@${user.username || 'N/A'}</td>
+                        <td>${user.telegramId}</td>
+                        <td><span class="badge badge-danger">${user.premiumBanCount}/2</span></td>
+                        <td>${user.premiumBannedAt ? new Date(user.premiumBannedAt).toLocaleDateString('uz-UZ') : 'N/A'}</td>
+                        <td>
+                          <button class="action-btn btn-approve" onclick="unbanPremiumUser('${user.telegramId}')">
+                            ✅ Blokdan chiqarish
+                          </button>
+                        </td>
+                      </tr>
+                    `,
+                      )
+                      .join('')
+              }
+            </tbody>
+          </table>
+        </div>
+      `;
+    }
   } catch (error) {
-    section.innerHTML = `<div class="loading">Xatolik: ${error.message}</div>`;
+    content.innerHTML = `<div class="loading">Xatolik: ${error.message}</div>`;
   }
 }
 
-async function approvePayment(id) {
+function renderPaymentsTable(payments, title, showActions) {
+  return `
+    <div class="data-table">
+      <div class="table-header">
+        <h3>${title} to'lovlar</h3>
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Foydalanuvchi</th>
+            <th>Summa</th>
+            <th>Muddati</th>
+            <th>Sana</th>
+            ${showActions ? '<th>Amallar</th>' : '<th>Status</th>'}
+          </tr>
+        </thead>
+        <tbody>
+          ${
+            payments.length === 0
+              ? `<tr><td colspan="${showActions ? 6 : 6}" style="text-align: center; padding: 40px;">${title} to'lovlar yo'q</td></tr>`
+              : payments
+                  .map(
+                    (payment) => `
+                  <tr>
+                    <td>${payment.id}</td>
+                    <td>${payment.user?.firstName || 'N/A'} (@${payment.user?.username || payment.user?.telegramId})</td>
+                    <td>${payment.amount.toLocaleString()} ${payment.currency || 'UZS'}</td>
+                    <td>${payment.duration} kun</td>
+                    <td>${new Date(payment.createdAt).toLocaleString('uz-UZ')}</td>
+                    <td>
+                      ${
+                        showActions
+                          ? `
+                        <button class="action-btn btn-approve" onclick="approvePayment(${payment.id}, ${payment.duration})">
+                          ✅ Tasdiqlash
+                        </button>
+                        <button class="action-btn btn-reject" onclick="rejectPayment(${payment.id})">
+                          ❌ Rad etish
+                        </button>
+                      `
+                          : `
+                        <span class="badge badge-${payment.status === 'APPROVED' ? 'success' : 'danger'}">
+                          ${payment.status === 'APPROVED' ? 'Tasdiqlangan' : 'Rad etilgan'}
+                        </span>
+                      `
+                      }
+                    </td>
+                  </tr>
+                `,
+                  )
+                  .join('')
+          }
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
+async function approvePayment(id, duration) {
   if (!confirm("To'lovni tasdiqlashga ishonchingiz komilmi?")) return;
 
   try {
-    await apiRequest(`/payments/${id}/approve`, { method: 'PUT' });
-    loadPayments();
+    await apiRequest(`/payments/${id}/approve`, {
+      method: 'PUT',
+      body: JSON.stringify({ durationDays: duration || 30 }),
+    });
+    showPaymentTab('pending');
     alert("To'lov tasdiqlandi!");
   } catch (error) {
     alert('Xatolik: ' + error.message);
@@ -1038,12 +1194,32 @@ async function approvePayment(id) {
 }
 
 async function rejectPayment(id) {
-  if (!confirm("To'lovni rad etishga ishonchingiz komilmi?")) return;
+  const reason = prompt('Rad etish sababini yozing (ixtiyoriy):');
 
   try {
-    await apiRequest(`/payments/${id}/reject`, { method: 'PUT' });
-    loadPayments();
+    await apiRequest(`/payments/${id}/reject`, {
+      method: 'PUT',
+      body: JSON.stringify({ reason }),
+    });
+    showPaymentTab('pending');
     alert("To'lov rad etildi!");
+  } catch (error) {
+    alert('Xatolik: ' + error.message);
+  }
+}
+
+async function unbanPremiumUser(telegramId) {
+  if (
+    !confirm(
+      'Foydalanuvchini premium blokdan chiqarishga ishonchingiz komilmi?',
+    )
+  )
+    return;
+
+  try {
+    await apiRequest(`/users/${telegramId}/unban-premium`, { method: 'PUT' });
+    showPaymentTab('banned');
+    alert('Foydalanuvchi premium blokdan chiqarildi!');
   } catch (error) {
     alert('Xatolik: ' + error.message);
   }

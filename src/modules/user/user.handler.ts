@@ -1134,12 +1134,11 @@ Savollaringiz bo'lsa murojaat qiling:
     for (const subscribed of status.subscribedChannels) {
       if (subscribed.isSubscribed) {
         await this.channelService.incrementMemberCount(subscribed.id);
+      }
 
-        if (subscribed.type === 'PRIVATE' && subscribed.hasPendingRequest) {
-          await this.channelService.decrementPendingRequests(subscribed.id);
-          const cacheKey = `${ctx.from.id}_${subscribed.channelId}`;
-          this.joinRequestCache.delete(cacheKey);
-        }
+      // Decrement pending requests if it was pending but now cleared
+      if (subscribed.type === 'PRIVATE' && subscribed.hasPendingRequest) {
+        await this.channelService.decrementPendingRequests(subscribed.id);
       }
     }
 
@@ -1623,14 +1622,31 @@ Savollaringiz bo'lsa murojaat qiling:
           const botUsername = (await ctx.api.getMe()).username;
           const shareLink = `https://t.me/${botUsername}?start=${code}`;
 
+          // Get channel link from field
+          const field = await this.prisma.field.findUnique({
+            where: { id: movie.fieldId },
+            select: { channelLink: true },
+          });
+          const channelLink = field?.channelLink || '@YourChannel';
+
+          // Format the message with box-drawing characters
+          const messageText = `╭────────────────────
+├‣  Kino nomi : ${movie.title}
+├‣  Kino kodi: ${code}
+├‣  Qism: ${movie.totalEpisodes || 1}
+├‣  Janrlari: ${movie.genre || 'N/A'}
+├‣  Kanal: ${channelLink}
+╰────────────────────
+▶️ Kinoning to'liq qismini @${botUsername} dan tomosha qilishingiz mumkin!`;
+
           results.push({
             type: 'article',
             id: `movie_${code}`,
             title: `🎬 ${movie.title}`,
             description: movie.description || "Kinoni ko'rish",
             input_message_content: {
-              message_text: `🎬 **${movie.title}**\n\n${movie.description || ''}\n\n🆔 Kod: ${code}\n\n👇 Ko'rish uchun pastdagi tugmani bosing:`,
-              parse_mode: 'Markdown',
+              message_text: messageText,
+              parse_mode: undefined,
             },
             reply_markup: {
               inline_keyboard: [
@@ -1654,14 +1670,31 @@ Savollaringiz bo'lsa murojaat qiling:
           const botUsername = (await ctx.api.getMe()).username;
           const shareLink = `https://t.me/${botUsername}?start=s${code}`;
 
+          // Get channel link from field
+          const field = await this.prisma.field.findUnique({
+            where: { id: serial.fieldId },
+            select: { channelLink: true },
+          });
+          const channelLink = field?.channelLink || '@YourChannel';
+
+          // Format the message with box-drawing characters
+          const messageText = `╭────────────────────
+├‣  Serial nomi : ${serial.title}
+├‣  Serial kodi: ${code}
+├‣  Qism: ${serial.totalEpisodes}
+├‣  Janrlari: ${serial.genre || 'N/A'}
+├‣  Kanal: ${channelLink}
+╰────────────────────
+▶️ Serialning to'liq qismlarini @${botUsername} dan tomosha qilishingiz mumkin!`;
+
           results.push({
             type: 'article',
             id: `serial_${code}`,
             title: `📺 ${serial.title}`,
             description: serial.description || "Serialni ko'rish",
             input_message_content: {
-              message_text: `📺 **${serial.title}**\n\n${serial.description || ''}\n\n📊 Qismlar: ${serial.totalEpisodes}\n🆔 Kod: ${code}\n\n👇 Ko'rish uchun pastdagi tugmani bosing:`,
-              parse_mode: 'Markdown',
+              message_text: messageText,
+              parse_mode: undefined,
             },
             reply_markup: {
               inline_keyboard: [

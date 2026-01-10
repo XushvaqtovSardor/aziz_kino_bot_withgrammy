@@ -62,24 +62,31 @@ export class SerialService {
 
     // Search for available codes near targetCode (both Movie and Serial)
     while (availableCodes.length < limit && offset <= 1000) {
-      const lowerCode = targetCode - offset;
+      // Check higher code
       const upperCode = targetCode + offset;
-
-      if (
-        lowerCode > 0 &&
-        (await this.codeGenerator.isCodeAvailable(String(lowerCode)))
-      ) {
-        availableCodes.push(lowerCode);
-      }
-
       if (await this.codeGenerator.isCodeAvailable(String(upperCode))) {
         availableCodes.push(upperCode);
+      }
+
+      // Check lower code (only if positive)
+      if (targetCode - offset > 0) {
+        const lowerCode = targetCode - offset;
+        if (await this.codeGenerator.isCodeAvailable(String(lowerCode))) {
+          availableCodes.push(lowerCode);
+        }
       }
 
       offset++;
     }
 
-    return availableCodes.slice(0, limit).sort((a, b) => a - b);
+    return availableCodes
+      .sort((a, b) => {
+        // Sort by distance from requested code
+        const distA = Math.abs(a - targetCode);
+        const distB = Math.abs(b - targetCode);
+        return distA - distB;
+      })
+      .slice(0, limit);
   }
 
   async findAll(fieldId?: number) {
