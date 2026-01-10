@@ -1075,9 +1075,10 @@ Savollaringiz bo'lsa murojaat qiling:
 
     // List each unsubscribed channel with number
     status.unsubscribedChannels.forEach((channel, index) => {
-      message += `(${index + 1}):\n`;
-      message += `<blockquote>${channel.channelName}</blockquote>\n`;
+      // message += `(${index + 1}):\n`;
+      message += ``;
     });
+    //<blockquote>${channel.channelName}</blockquote>\n
 
     message += `\n💎 Premium obuna sotib olib, kanallarga obuna bo'lmasdan foydalanishingiz mumkin.`;
 
