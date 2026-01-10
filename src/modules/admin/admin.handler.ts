@@ -3628,6 +3628,12 @@ ${existingSerial.description || ''}
   private async startPremiereBroadcast(ctx: any) {
     try {
       this.logger.log('🎬 Starting premiere broadcast...');
+
+      // Answer callback query first
+      if (ctx.callbackQuery) {
+        await ctx.answerCallbackQuery();
+      }
+
       // Get admin info
       const admin = await this.adminService.getAdminByTelegramId(ctx.from.id);
       if (!admin) {
@@ -3900,11 +3906,19 @@ ${existingSerial.description || ''}
 
   private async startTelegramPremiumBroadcast(ctx: any) {
     try {
+      this.logger.log('⭐️ Starting Telegram Premium broadcast...');
+
+      // Answer callback query first
+      if (ctx.callbackQuery) {
+        await ctx.answerCallbackQuery();
+      }
+
       const admin = await this.adminService.getAdminByTelegramId(ctx.from.id);
       if (!admin) {
         await ctx.reply('⛔️ Admin topilmadi.');
         return;
       }
+      this.logger.log(`Admin found: ${admin.username || admin.telegramId}`);
 
       // Get count of Telegram Premium users
       const premiumUserCount = await this.prisma.user.count({
