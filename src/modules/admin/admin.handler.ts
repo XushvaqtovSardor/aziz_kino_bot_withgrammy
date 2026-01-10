@@ -268,14 +268,6 @@ export class AdminHandler implements OnModuleInit {
       if (admin) await this.rejectPayment(ctx);
     });
 
-    bot.callbackQuery(
-      /^confirm_premiere_(movie|serial)_(\d+)$/,
-      async (ctx) => {
-        const admin = await this.getAdmin(ctx);
-        if (admin) await this.confirmPremiereBroadcast(ctx);
-      },
-    );
-
     bot.callbackQuery('cancel_premiere', async (ctx) => {
       const admin = await this.getAdmin(ctx);
       if (admin) {
@@ -374,6 +366,36 @@ export class AdminHandler implements OnModuleInit {
     bot.callbackQuery('cancel_delete_content', async (ctx) => {
       const admin = await this.getAdmin(ctx);
       if (admin) await this.cancelDeleteContent(ctx);
+    });
+
+    bot.callbackQuery(/^send_to_field_(movie|serial)_(\d+)$/, async (ctx) => {
+      const admin = await this.getAdmin(ctx);
+      if (admin) await this.sendToFieldChannel(ctx);
+    });
+
+    bot.callbackQuery(
+      /^broadcast_premiere_(movie|serial)_(\d+)$/,
+      async (ctx) => {
+        const admin = await this.getAdmin(ctx);
+        if (admin) await this.broadcastPremiereToUsers(ctx);
+      },
+    );
+
+    bot.callbackQuery('confirm_clear_history', async (ctx) => {
+      const admin = await this.getAdmin(ctx);
+      if (admin) await this.confirmClearHistory(ctx);
+    });
+
+    bot.callbackQuery('cancel_clear_history', async (ctx) => {
+      const admin = await this.getAdmin(ctx);
+      if (admin) {
+        await ctx.answerCallbackQuery('❌ Bekor qilindi');
+        await ctx.editMessageReplyMarkup({ reply_markup: { inline_keyboard: [] } });
+        await ctx.reply(
+          '❌ Tarixni tozalash bekor qilindi.',
+          AdminKeyboard.getAdminMainMenu(admin.role),
+        );
+      }
     });
 
     bot.callbackQuery('add_new_admin', async (ctx) => {
@@ -3690,15 +3712,23 @@ ${existingSerial.description || ''}
       }
 
       // Get field info for channel link
-      const field = content.field || await this.prisma.field.findUnique({
-        where: { id: content.fieldId },
-      });
+      const field =
+        content.field ||
+        (await this.prisma.field.findUnique({
+          where: { id: content.fieldId },
+        }));
 
       // Ask if admin wants to send to field channel
       const keyboard = new InlineKeyboard()
-        .text('📢 Ha, field kanalga yuborish', `send_to_field_${contentType}_${codeNumber}`)
+        .text(
+          '📢 Ha, field kanalga yuborish',
+          `send_to_field_${contentType}_${codeNumber}`,
+        )
         .row()
-        .text('👥 Faqat foydalanuvchilarga', `broadcast_premiere_${contentType}_${codeNumber}`)
+        .text(
+          '👥 Faqat foydalanuvchilarga',
+          `broadcast_premiere_${contentType}_${codeNumber}`,
+        )
         .row()
         .text('❌ Bekor qilish', 'cancel_premiere');
 
@@ -3717,7 +3747,7 @@ ${existingSerial.description || ''}
       if (content.posterFileId) {
         await ctx.replyWithPhoto(content.posterFileId, {
           caption:
-            '🎬 **Premyera e\'loni**\n\n' +
+            "🎬 **Premyera e'loni**\n\n" +
             caption +
             '\n\n📢 Bu kontentni qayerga yubormoqchisiz?',
           parse_mode: 'Markdown',
@@ -3725,7 +3755,7 @@ ${existingSerial.description || ''}
         });
       } else {
         await ctx.reply(
-          '🎬 **Premyera e\'loni**\n\n' +
+          "🎬 **Premyera e'loni**\n\n" +
             caption +
             '\n\n📢 Bu kontentni qayerga yubormoqchisiz?',
           {
@@ -3746,71 +3776,6 @@ ${existingSerial.description || ''}
           fieldId: content.fieldId,
           fieldChannelId: field?.channelId,
           databaseChannelId: field?.databaseChannelId,
-        },
-      });
-    } catch (error) {
-      this.logger.error('Error handling premiere broadcast steps:', error);
-      await ctx.reply("❌ Xatolik yuz berdi. Qaytadan urinib ko'ring.");
-      this.sessionService.clearSession(ctx.from.id);
-    }
-  }
-        `├‣ Janrlari: ${content.genre || "Noma'lum"}\n` +
-        `├‣ Kanal: @${field?.name || 'Kanal'}\n` +
-        '╰────────────────────\n' +
-        `▶️ ${isSerial ? 'Serialning' : 'Kinoning'} to'liq qismini @${ctx.me.username} dan tomosha qilishingiz mumkin!`;
-
-      // Get all users
-      const users = await this.prisma.user.findMany({
-        where: { isBlocked: false },
-      });
-
-      // Send confirmation to admin first
-      if (content.posterFileId) {
-        await ctx.replyWithPhoto(content.posterFileId, {
-          caption:
-            '📤 Quyidagi xabar barcha foydalanuvchilarga yuboriladi:\n\n' +
-            caption,
-          reply_markup: {
-            inline_keyboard: [
-              [
-                {
-                  text: '✅ Tasdiqlash',
-                  callback_data: `confirm_premiere_${contentType}_${codeNumber}`,
-                },
-                { text: '❌ Bekor qilish', callback_data: 'cancel_premiere' },
-              ],
-            ],
-          },
-        });
-      } else {
-        await ctx.reply(
-          '📤 Quyidagi xabar barcha foydalanuvchilarga yuboriladi:\n\n' +
-            caption,
-          {
-            reply_markup: {
-              inline_keyboard: [
-                [
-                  {
-                    text: '✅ Tasdiqlash',
-                    callback_data: `confirm_premiere_${contentType}_${codeNumber}`,
-                  },
-                  { text: '❌ Bekor qilish', callback_data: 'cancel_premiere' },
-                ],
-              ],
-            },
-          },
-        );
-      }
-
-      // Save data to session for confirmation
-      this.sessionService.updateSession(ctx.from.id, {
-        state: AdminState.BROADCAST_PREMIERE,
-        data: {
-          contentType,
-          code: codeNumber,
-          caption,
-          poster: content.posterFileId,
-          userCount: users.length,
         },
       });
     } catch (error) {
@@ -3846,7 +3811,7 @@ ${existingSerial.description || ''}
       let successCount = 0;
       let failCount = 0;
 
-      await ctx.editMessageReplyMarkup({ inline_keyboard: [] });
+      await ctx.editMessageReplyMarkup({ reply_markup: { inline_keyboard: [] } });
       const statusMsg = await ctx.reply(
         `📤 Yuborish boshlandi...\n\n👥 Jami: ${users.length}\n✅ Yuborildi: 0\n❌ Xatolik: 0`,
       );
@@ -4046,7 +4011,7 @@ ${existingSerial.description || ''}
       let successCount = 0;
       let failCount = 0;
 
-      await ctx.editMessageReplyMarkup({ inline_keyboard: [] });
+      await ctx.editMessageReplyMarkup({ reply_markup: { inline_keyboard: [] } });
       const statusMsg = await ctx.reply(
         `📤 Yuborish boshlandi...\n\n👥 Jami: ${telegramPremiumUsers.length}\n✅ Yuborildi: 0\n❌ Xatolik: 0`,
       );
@@ -4286,7 +4251,7 @@ ${existingSerial.description || ''}
       this.sessionService.clearSession(ctx.from.id);
 
       // Edit message to remove buttons
-      await ctx.editMessageReplyMarkup({ inline_keyboard: [] });
+      await ctx.editMessageReplyMarkup({ reply_markup: { inline_keyboard: [] } });
 
       const admin = await this.adminService.getAdminByTelegramId(ctx.from.id);
       await ctx.reply(
@@ -4446,7 +4411,7 @@ ${existingSerial.description || ''}
       this.sessionService.clearSession(ctx.from.id);
 
       // Edit message to remove buttons
-      await ctx.editMessageReplyMarkup({ inline_keyboard: [] });
+      await ctx.editMessageReplyMarkup({ reply_markup: { inline_keyboard: [] } });
 
       const admin = await this.adminService.getAdminByTelegramId(ctx.from.id);
       await ctx.reply(
@@ -4692,7 +4657,7 @@ ${existingSerial.description || ''}
       this.sessionService.clearSession(ctx.from.id);
 
       // Edit message to remove buttons
-      await ctx.editMessageReplyMarkup({ inline_keyboard: [] });
+      await ctx.editMessageReplyMarkup({ reply_markup: { inline_keyboard: [] } });
 
       const admin = await this.adminService.getAdminByTelegramId(ctx.from.id);
       await ctx.reply(
@@ -4712,7 +4677,7 @@ ${existingSerial.description || ''}
   private async cancelUnbanPremium(ctx: any) {
     try {
       await ctx.answerCallbackQuery();
-      await ctx.editMessageReplyMarkup({ inline_keyboard: [] });
+      await ctx.editMessageReplyMarkup({ reply_markup: { inline_keyboard: [] } });
 
       this.sessionService.clearSession(ctx.from.id);
 
@@ -4846,7 +4811,7 @@ ${existingSerial.description || ''}
 
     try {
       await ctx.answerCallbackQuery();
-      await ctx.editMessageReplyMarkup({ inline_keyboard: [] });
+      await ctx.editMessageReplyMarkup({ reply_markup: { inline_keyboard: [] } });
 
       const movie = await this.prisma.movie.findUnique({
         where: { code: parseInt(code) },
@@ -4896,7 +4861,7 @@ ${existingSerial.description || ''}
 
     try {
       await ctx.answerCallbackQuery();
-      await ctx.editMessageReplyMarkup({ inline_keyboard: [] });
+      await ctx.editMessageReplyMarkup({ reply_markup: { inline_keyboard: [] } });
 
       const serial = await this.prisma.serial.findUnique({
         where: { code: parseInt(code) },
@@ -4944,7 +4909,7 @@ ${existingSerial.description || ''}
   private async cancelDeleteContent(ctx: any) {
     try {
       await ctx.answerCallbackQuery();
-      await ctx.editMessageReplyMarkup({ inline_keyboard: [] });
+      await ctx.editMessageReplyMarkup({ reply_markup: { inline_keyboard: [] } });
 
       this.sessionService.clearSession(ctx.from.id);
 
@@ -4955,6 +4920,236 @@ ${existingSerial.description || ''}
       );
     } catch (error) {
       this.logger.error('Error canceling delete:', error);
+    }
+  }
+
+  // ==================== CLEAR CHANNEL HISTORY ====================
+  private async clearChannelHistory(ctx: BotContext) {
+    const admin = await this.getAdmin(ctx);
+    if (!admin) return;
+
+    // Only SuperAdmin can clear history
+    if (admin.role !== 'SUPERADMIN') {
+      await ctx.reply('❌ Faqat SuperAdmin tarixni tozalashi mumkin!');
+      return;
+    }
+
+    const keyboard = new InlineKeyboard()
+      .text('✅ Ha, tozalash', 'confirm_clear_history')
+      .text('❌ Bekor qilish', 'cancel_clear_history');
+
+    await ctx.reply(
+      '⚠️ **Tasdiqlash kerak!**\n\n' +
+        "Barcha majburiy kanallar tarixi o'chiriladi:\n" +
+        "• Nofaol kanallar o'chiriladi\n" +
+        '• Faol kanallar saqlanadi\n' +
+        "• A'zolar va statistika tozalanadi\n\n" +
+        'Davom etishni xohlaysizmi?',
+      { parse_mode: 'Markdown', reply_markup: keyboard },
+    );
+  }
+
+  private async confirmClearHistory(ctx: any) {
+    try {
+      await ctx.answerCallbackQuery('🗑️ Tozalanmoqda...');
+      await ctx.editMessageReplyMarkup({ reply_markup: { inline_keyboard: [] } });
+
+      // Delete all inactive channels
+      const result = await this.prisma.mandatoryChannel.deleteMany({
+        where: { isActive: false },
+      });
+
+      // Reset active channels' member counts and pending requests
+      await this.prisma.mandatoryChannel.updateMany({
+        where: { isActive: true },
+        data: {
+          currentMembers: 0,
+          pendingRequests: 0,
+        },
+      });
+
+      const admin = await this.adminService.getAdminByTelegramId(ctx.from.id);
+      await ctx.reply(
+        '✅ **Tarix muvaffaqiyatli tozalandi!**\n\n' +
+          `🗑️ O'chirilgan nofaol kanallar: ${result.count}\n` +
+          '📊 Faol kanallar statistikasi tozalandi\n\n' +
+          'Tarix qaytadan boshlanadi.',
+        {
+          parse_mode: 'Markdown',
+          reply_markup: AdminKeyboard.getAdminMainMenu(admin?.role || 'ADMIN'),
+        },
+      );
+    } catch (error) {
+      this.logger.error('Error clearing channel history:', error);
+      await ctx.reply('❌ Xatolik yuz berdi: ' + error.message);
+    }
+  }
+
+  // ==================== SEND TO FIELD CHANNEL ====================
+  private async sendToFieldChannel(ctx: any) {
+    try {
+      await ctx.answerCallbackQuery('📤 Field kanalga yuborilmoqda...');
+
+      const session = this.sessionService.getSession(ctx.from.id);
+      if (!session || !session.data) {
+        await ctx.reply("❌ Ma'lumot topilmadi.");
+        return;
+      }
+
+      const { contentType, code, caption, poster, databaseChannelId } =
+        session.data;
+
+      if (!databaseChannelId) {
+        await ctx.reply(
+          "❌ Field kanal topilmadi! Bu kontent field kanalga bog'lanmagan.",
+        );
+        return;
+      }
+
+      // Get database channel info
+      const dbChannel = await this.prisma.databaseChannel.findUnique({
+        where: { id: databaseChannelId },
+      });
+
+      if (!dbChannel) {
+        await ctx.reply('❌ Database kanal topilmadi!');
+        return;
+      }
+
+      // Send to field channel
+      try {
+        if (poster) {
+          await ctx.api.sendPhoto(dbChannel.channelId, poster, {
+            caption: caption,
+          });
+        } else {
+          await ctx.api.sendMessage(dbChannel.channelId, caption);
+        }
+
+        await ctx.editMessageReplyMarkup({ reply_markup: { inline_keyboard: [] } });
+
+        const admin = await this.adminService.getAdminByTelegramId(ctx.from.id);
+        await ctx.reply(
+          '✅ **Field kanalga yuborildi!**\n\n' +
+            `📢 Kanal: ${dbChannel.channelName}\n` +
+            `🎬 Kontent: ${contentType === 'movie' ? 'Kino' : 'Serial'}\n` +
+            `🆔 Kod: ${code}\n\n` +
+            'Foydalanuvchilarga ham yuborish uchun "Kino premyera" ni qayta bosing.',
+          {
+            parse_mode: 'Markdown',
+            reply_markup: AdminKeyboard.getAdminMainMenu(
+              admin?.role || 'ADMIN',
+            ),
+          },
+        );
+      } catch (error) {
+        this.logger.error('Error sending to field channel:', error);
+        await ctx.reply(
+          '❌ Field kanalga yuborishda xatolik: ' + error.message,
+        );
+      }
+
+      this.sessionService.clearSession(ctx.from.id);
+    } catch (error) {
+      this.logger.error('Error in sendToFieldChannel:', error);
+      await ctx.reply('❌ Xatolik yuz berdi.');
+    }
+  }
+
+  // ==================== BROADCAST PREMIERE TO USERS ====================
+  private async broadcastPremiereToUsers(ctx: any) {
+    try {
+      await ctx.answerCallbackQuery('📤 Foydalanuvchilarga yuborilmoqda...');
+      await ctx.editMessageReplyMarkup({ reply_markup: { inline_keyboard: [] } });
+
+      const session = this.sessionService.getSession(ctx.from.id);
+      if (!session || !session.data) {
+        await ctx.reply("❌ Ma'lumot topilmadi.");
+        return;
+      }
+
+      const { caption, poster, contentType, code } = session.data;
+
+      // Get all active users
+      const users = await this.prisma.user.findMany({
+        where: { isBlocked: false },
+      });
+
+      // Get bot username
+      const botInfo = await ctx.api.getMe();
+      const botUsername = botInfo.username || 'bot';
+
+      // Send to all users
+      let successCount = 0;
+      let failCount = 0;
+
+      const statusMsg = await ctx.reply(
+        `📤 Yuborish boshlandi...\n\n👥 Jami: ${users.length}\n✅ Yuborildi: 0\n❌ Xatolik: 0`,
+      );
+
+      for (const user of users) {
+        try {
+          // Create deep link button
+          const deepLink = `https://t.me/${botUsername}?start=${contentType === 'serial' ? 's' : ''}${code}`;
+          const keyboard = new InlineKeyboard().url(
+            '▶️ Tomosha qilish',
+            deepLink,
+          );
+
+          if (poster) {
+            await ctx.api.sendPhoto(user.telegramId, poster, {
+              caption: caption,
+              reply_markup: keyboard,
+            });
+          } else {
+            await ctx.api.sendMessage(user.telegramId, caption, {
+              reply_markup: keyboard,
+            });
+          }
+
+          successCount++;
+
+          // Update status every 50 users
+          if (successCount % 50 === 0) {
+            await ctx.api.editMessageText(
+              statusMsg.chat.id,
+              statusMsg.message_id,
+              `📤 Yuborish davom etmoqda...\n\n👥 Jami: ${users.length}\n✅ Yuborildi: ${successCount}\n❌ Xatolik: ${failCount}`,
+            );
+          }
+
+          // Delay to avoid rate limits
+          await new Promise((resolve) => setTimeout(resolve, 50));
+        } catch (error) {
+          failCount++;
+          this.logger.error(
+            `Failed to send to user ${user.telegramId}:`,
+            error,
+          );
+        }
+      }
+
+      // Final status
+      await ctx.api.editMessageText(
+        statusMsg.chat.id,
+        statusMsg.message_id,
+        `✅ **Yuborish yakunlandi!**\n\n` +
+          `👥 Jami: ${users.length}\n` +
+          `✅ Yuborildi: ${successCount}\n` +
+          `❌ Xatolik: ${failCount}`,
+        { parse_mode: 'Markdown' },
+      );
+
+      const admin = await this.adminService.getAdminByTelegramId(ctx.from.id);
+      await ctx.reply(
+        "🎉 Premyera e'loni muvaffaqiyatli yuborildi!",
+        AdminKeyboard.getAdminMainMenu(admin?.role || 'ADMIN'),
+      );
+
+      this.sessionService.clearSession(ctx.from.id);
+    } catch (error) {
+      this.logger.error('Error in broadcastPremiereToUsers:', error);
+      await ctx.reply('❌ Xatolik yuz berdi.');
     }
   }
 }
