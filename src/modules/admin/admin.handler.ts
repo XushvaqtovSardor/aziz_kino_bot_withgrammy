@@ -5193,12 +5193,26 @@ Qaysi rol berasiz?
 
       // Send to field channel
       try {
+        // Get bot username for deep link
+        const botInfo = await ctx.api.getMe();
+        const botUsername = botInfo.username || 'bot';
+
+        // Create deep link button
+        const deepLink = `https://t.me/${botUsername}?start=${contentType === 'serial' ? 's' : ''}${code}`;
+        const keyboard = new InlineKeyboard().url(
+          '▶️ Tomosha qilish',
+          deepLink,
+        );
+
         if (poster) {
           await ctx.api.sendPhoto(targetChannelId, poster, {
             caption: caption,
+            reply_markup: keyboard,
           });
         } else {
-          await ctx.api.sendMessage(targetChannelId, caption);
+          await ctx.api.sendMessage(targetChannelId, caption, {
+            reply_markup: keyboard,
+          });
         }
 
         await ctx.editMessageReplyMarkup({
