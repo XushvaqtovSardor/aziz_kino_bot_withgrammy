@@ -1080,7 +1080,7 @@ Savollaringiz bo'lsa murojaat qiling:
     });
     //<blockquote>${channel.channelName}</blockquote>\n
 
-    message += `\n💎 Premium obuna sotib olib, kanallarga obuna bo'lmasdan foydalanishingiz mumkin.`;
+    message += `<blockquote>\n💎 Premium obuna sotib olib, kanallarga obuna bo'lmasdan foydalanishingiz mumkin.</blockquote>`;
 
     // Add content code if provided
     if (contentCode && contentType) {
