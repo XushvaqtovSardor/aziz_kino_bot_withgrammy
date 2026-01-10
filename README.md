@@ -29,8 +29,8 @@ Telegram bot for managing and sharing movies and TV series with premium subscrip
 
 ```bash
 # Clone repository
-git clone <your-repo>
-cd aziz_bot_grammy
+git clone https://github.com/XushvaqtovSardor/aziz_kino_bot_withgrammy.git
+cd aziz_kino_bot_withgrammy
 
 # Install dependencies
 pnpm install
@@ -47,7 +47,36 @@ pnpm prisma migrate dev
 pnpm start:dev
 ```
 
-See [QUICKSTART.md](./QUICKSTART.md) for more details.
+### Docker Deployment (Recommended)
+
+```bash
+# Setup environment
+cp .env.example .env
+nano .env  # Configure your settings
+
+# Build and start services
+docker compose up -d
+
+# Run database migrations
+docker compose exec app npx prisma migrate deploy
+
+# View logs
+docker compose logs -f app
+```
+
+### Digital Ocean Deployment
+
+See [DIGITAL_OCEAN_DEPLOY.md](./DIGITAL_OCEAN_DEPLOY.md) for complete deployment guide.
+
+**Quick Deploy:**
+```bash
+# On your droplet
+git clone https://github.com/XushvaqtovSardor/aziz_kino_bot_withgrammy.git
+cd aziz_kino_bot_withgrammy
+cp .env.example .env
+nano .env  # Configure settings
+docker compose up -d
+```
 
 ## 🐳 Docker Deployment
 

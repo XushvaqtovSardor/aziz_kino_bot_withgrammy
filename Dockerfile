@@ -5,7 +5,7 @@ FROM node:20-alpine AS builder
 RUN npm install -g pnpm
 
 WORKDIR /app
-
+COPY prisma ./prisma
 # Copy package files
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 
@@ -16,7 +16,10 @@ RUN pnpm install --frozen-lockfile
 COPY . .
 
 # Generate Prisma Client
-RUN pnpm prisma generate
+# RUN pnpm prisma generate
+COPY --from=builder /app/dist ./dist
+COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/prisma ./prisma
 
 # Build application
 RUN pnpm build

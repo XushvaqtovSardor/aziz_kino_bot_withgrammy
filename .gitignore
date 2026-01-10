@@ -4,19 +4,21 @@
 /build
 
 # Logs
-logs
-*.log
+logs/*.log
+logs/*-audit.json
+!logs/error-*.log
 npm-debug.log*
 pnpm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 lerna-debug.log*
-<<<<<<< HEAD
+
+# SSH Keys
 droplet_2
 droplet_2.pub
-=======
+*.pem
+*.key
 
->>>>>>> 9e7ed34722035ce8c5e304e50c0ff830bf2359f3
 # OS
 .DS_Store
 
@@ -46,10 +48,7 @@ droplet_2.pub
 .env.test.local
 .env.production.local
 .env.local
-<<<<<<< HEAD
 .env.railway
-=======
->>>>>>> 9e7ed34722035ce8c5e304e50c0ff830bf2359f3
 
 # temp directory
 .temp

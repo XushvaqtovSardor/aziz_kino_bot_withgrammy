@@ -1063,31 +1063,28 @@ Savollaringiz bo'lsa murojaat qiling:
     const externalChannels = status.unsubscribedChannels.filter(
       (ch) => ch.isExternal,
     );
-
+    //📱 <b>Telegram kanallar</b>
     if (telegramChannels.length > 0) {
-      message += `📱 <b>Telegram kanallar</b> (${telegramChannels.length}):\n`;
+      message += `(${telegramChannels.length}):\n`;
       telegramChannels.forEach((channel, index) => {
-        const channelTypeEmoji =
-          channel.type === 'PUBLIC'
-            ? '🔓'
-            : channel.type === 'PRIVATE'
-              ? '🔐'
-              : '🔒';
-        message += `${index + 1}. ${channelTypeEmoji} ${channel.channelName}\n`;
+        // const channelTypeEmoji =
+        //   channel.type === 'PUBLIC'
+        //     ? '🔓'
+        //     : channel.type === 'PRIVATE'
+        //       ? '🔐'
+        //       : '🔒';
+        message += `${index + 1}.  ${channel.channelName}\n`;
       });
       message += '\n';
     }
 
     if (externalChannels.length > 0) {
-      message += `🌐 <b>Tashqi sahifalar</b> (${externalChannels.length}):\n`;
-      externalChannels.forEach((channel, index) => {
-        message += `${index + 1}. 🔗 ${channel.channelName}\n`;
-      });
+      // message += ` <b>Tashqi sahifalar</b> (${externalChannels.length}):\n`;
+      // externalChannels.forEach((channel, index) => {
+      //   message += `${index + 1}. 🔗 ${channel.channelName}\n`;
+      // });
       message += '\n';
     }
-
-    message += `✅ Telegram kanallariga obuna bo'ling yoki qo'shilish so'rovini yuboring.\n`;
-    message += `🌐 Tashqi sahifalarga obuna bo'lishingiz tavsiya etiladi (majburiy emas).\n\n`;
     message += `<blockquote>💎 Premium obuna sotib olib, kanallarga obuna bo'lmasdan foydalanishingiz mumkin.</blockquote>`;
 
     const keyboard = new InlineKeyboard();
